@@ -58,16 +58,32 @@ class ContentScannerService
         $this->client = new Client([
             'timeout' => 20,
             'connect_timeout' => 10,
-            'verify' => false, // Disable SSL verification jika ada masalah sertifikat
+            'verify' => false, // SSL verification disabled
+            'headers' => [
+                'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language' => 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
+                'Accept-Encoding' => 'gzip, deflate',
+                'Connection' => 'keep-alive',
+                'Upgrade-Insecure-Requests' => '1',
+                'Sec-Fetch-Dest' => 'document',
+                'Sec-Fetch-Mode' => 'navigate',
+                'Sec-Fetch-Site' => 'none',
+                'Cache-Control' => 'max-age=0',
+            ],
+            'allow_redirects' => true,
+            'http_errors' => false,
         ]);
     }
 
     /**
      * Scan konten website untuk deteksi keyword judi online
-     * Meliputi: header, footer, meta, post (via WP-JSON), dan sitemap
      */
     public function scanContent($url)
     {
+        // Set execution time limit
+        set_time_limit(300); // 5 menit
+        
         $results = [
             'url' => $url,
             'scanned_at' => now()->toDateTimeString(),
@@ -88,7 +104,7 @@ class ContentScannerService
     }
 
     /**
-     * Scan posts via WP-JSON dengan pagination concurrent menggunakan Guzzle Pool
+     * Scan posts via WP-JSON dengan pagination concurrent
      */
     public function scanPosts($url)
     {
@@ -96,7 +112,6 @@ class ContentScannerService
             $baseUrl = rtrim($url, '/');
             $perPage = 100;
             
-            // First request untuk mendapatkan total pages dari header
             $firstPageUrl = $baseUrl . "/wp-json/wp/v2/posts?per_page={$perPage}&page=1";
             
             try {
@@ -105,6 +120,7 @@ class ContentScannerService
                 return [
                     'has_suspicious' => false,
                     'total_posts' => 0,
+                    'suspicious_count' => 0,
                     'suspicious_posts' => [],
                     'error' => 'Gagal akses WP-JSON (bukan WordPress atau WP-JSON disabled)',
                 ];
@@ -114,12 +130,12 @@ class ContentScannerService
                 return [
                     'has_suspicious' => false,
                     'total_posts' => 0,
+                    'suspicious_count' => 0,
                     'suspicious_posts' => [],
-                    'error' => 'Gagal akses WP-JSON',
+                    'error' => 'Gagal akses WP-JSON (HTTP ' . $response->getStatusCode() . ')',
                 ];
             }
 
-            // Get total pages dari header X-WP-TotalPages
             $totalPages = (int) $response->getHeaderLine('X-WP-TotalPages');
             $totalPosts = (int) $response->getHeaderLine('X-WP-Total');
             
@@ -127,12 +143,10 @@ class ContentScannerService
                 $totalPages = 1;
             }
 
-            // Limit maximum pages untuk safety
-            $maxPages = min($totalPages, 50); // Maksimal 50 pages = 5000 posts
+            $maxPages = min($totalPages, 50);
 
             $allPosts = json_decode($response->getBody()->getContents(), true);
 
-            // Jika ada lebih dari 1 page, fetch concurrent
             if ($maxPages > 1) {
                 $additionalPosts = $this->fetchPostsConcurrently($baseUrl, $perPage, 2, $maxPages);
                 $allPosts = array_merge($allPosts, $additionalPosts);
@@ -142,6 +156,7 @@ class ContentScannerService
                 return [
                     'has_suspicious' => false,
                     'total_posts' => 0,
+                    'suspicious_count' => 0,
                     'suspicious_posts' => [],
                     'error' => 'Tidak ada posts ditemukan',
                 ];
@@ -149,7 +164,6 @@ class ContentScannerService
 
             $suspiciousPosts = [];
 
-            // Scan semua posts
             foreach ($allPosts as $post) {
                 $content = strtolower($post['content']['rendered'] ?? '');
                 $title = strtolower($post['title']['rendered'] ?? '');
@@ -185,6 +199,7 @@ class ContentScannerService
             return [
                 'has_suspicious' => false,
                 'total_posts' => 0,
+                'suspicious_count' => 0,
                 'suspicious_posts' => [],
                 'error' => $e->getMessage(),
             ];
@@ -192,13 +207,12 @@ class ContentScannerService
     }
 
     /**
-     * Fetch multiple pages concurrently menggunakan Guzzle Pool
+     * Fetch multiple pages concurrently
      */
     protected function fetchPostsConcurrently($baseUrl, $perPage, $startPage, $endPage)
     {
         $allPosts = [];
         
-        // Generator function untuk create requests
         $requests = function () use ($baseUrl, $perPage, $startPage, $endPage) {
             for ($page = $startPage; $page <= $endPage; $page++) {
                 $url = $baseUrl . "/wp-json/wp/v2/posts?per_page={$perPage}&page={$page}";
@@ -206,9 +220,8 @@ class ContentScannerService
             }
         };
 
-        // Create pool dengan concurrency
         $pool = new Pool($this->client, $requests(), [
-            'concurrency' => 5, // 5 concurrent requests
+            'concurrency' => 5,
             'fulfilled' => function ($response, $index) use (&$allPosts) {
                 $posts = json_decode($response->getBody()->getContents(), true);
                 if (is_array($posts)) {
@@ -216,11 +229,10 @@ class ContentScannerService
                 }
             },
             'rejected' => function ($reason, $index) {
-                // Handle error silently atau log jika perlu
+                // Silent error handling
             },
         ]);
 
-        // Execute pool
         $promise = $pool->promise();
         $promise->wait();
 
@@ -235,15 +247,28 @@ class ContentScannerService
         try {
             $response = $this->client->get($url);
 
-            if ($response->getStatusCode() !== 200) {
+            $statusCode = $response->getStatusCode();
+            $html = $response->getBody()->getContents();
+
+            if ($this->isBlockedByWAF($html, $statusCode)) {
                 return [
                     'has_suspicious' => false,
                     'keywords' => [],
-                    'error' => 'Gagal mengakses halaman',
+                    'keyword_count' => 0,
+                    'error' => 'Request diblokir oleh WAF/Cloudflare (HTTP ' . $statusCode . ')',
                 ];
             }
 
-            $html = strtolower($response->getBody()->getContents());
+            if ($statusCode !== 200) {
+                return [
+                    'has_suspicious' => false,
+                    'keywords' => [],
+                    'keyword_count' => 0,
+                    'error' => 'Gagal mengakses halaman (HTTP ' . $statusCode . ')',
+                ];
+            }
+
+            $html = strtolower($html);
             
             $foundKeywords = $this->detectKeywords($html);
 
@@ -258,28 +283,44 @@ class ContentScannerService
             return [
                 'has_suspicious' => false,
                 'keywords' => [],
+                'keyword_count' => 0,
                 'error' => $e->getMessage(),
             ];
         }
     }
 
     /**
-     * Scan meta tags (title, description, keywords)
+     * Scan meta tags
      */
     public function scanMeta($url)
     {
         try {
             $response = $this->client->get($url);
 
-            if ($response->getStatusCode() !== 200) {
+            $statusCode = $response->getStatusCode();
+            $html = $response->getBody()->getContents();
+
+            if ($this->isBlockedByWAF($html, $statusCode)) {
                 return [
                     'has_suspicious' => false,
                     'keywords' => [],
-                    'error' => 'Gagal mengakses halaman',
+                    'keyword_count' => 0,
+                    'meta_title' => '',
+                    'meta_description' => '',
+                    'error' => 'Request diblokir oleh WAF/Cloudflare (HTTP ' . $statusCode . ')',
                 ];
             }
 
-            $html = $response->getBody()->getContents();
+            if ($statusCode !== 200) {
+                return [
+                    'has_suspicious' => false,
+                    'keywords' => [],
+                    'keyword_count' => 0,
+                    'meta_title' => '',
+                    'meta_description' => '',
+                    'error' => 'Gagal mengakses halaman (HTTP ' . $statusCode . ')',
+                ];
+            }
             
             // Extract meta tags
             preg_match('/<title>(.*?)<\/title>/i', $html, $title);
@@ -307,6 +348,9 @@ class ContentScannerService
             return [
                 'has_suspicious' => false,
                 'keywords' => [],
+                'keyword_count' => 0,
+                'meta_title' => '',
+                'meta_description' => '',
                 'error' => $e->getMessage(),
             ];
         }
@@ -323,19 +367,22 @@ class ContentScannerService
 
             $response = $this->client->get($sitemapUrl);
 
-            if ($response->getStatusCode() !== 200) {
+            $statusCode = $response->getStatusCode();
+
+            if ($statusCode !== 200) {
                 return [
                     'has_suspicious' => false,
+                    'keywords' => [],
+                    'keyword_count' => 0,
                     'suspicious_urls' => [],
-                    'error' => 'Sitemap tidak ditemukan',
+                    'error' => 'Sitemap tidak ditemukan (HTTP ' . $statusCode . ')',
                 ];
             }
 
-            $xml = strtolower($response->getBody()->getContents());
+            $xml = $response->getBody()->getContents();
             
-            $foundKeywords = $this->detectKeywords($xml);
+            $foundKeywords = $this->detectKeywords(strtolower($xml));
 
-            // Extract URLs yang mengandung keyword
             $suspiciousUrls = [];
             if ($foundKeywords['is_suspicious']) {
                 preg_match_all('/<loc>(.*?)<\/loc>/i', $xml, $urls);
@@ -360,6 +407,8 @@ class ContentScannerService
         } catch (\Exception $e) {
             return [
                 'has_suspicious' => false,
+                'keywords' => [],
+                'keyword_count' => 0,
                 'suspicious_urls' => [],
                 'error' => $e->getMessage(),
             ];
@@ -367,21 +416,61 @@ class ContentScannerService
     }
 
     /**
-     * Deteksi keyword dalam text
-     * Rule: Suspicious jika ada minimal 1 specific keyword ATAU minimal 2 single keyword
+     * Deteksi WAF block
+     */
+    protected function isBlockedByWAF($html, $statusCode)
+    {
+        if (empty($html)) {
+            return false;
+        }
+
+        $htmlLower = strtolower($html);
+        
+        $blockPatterns = [
+            'request rejected',
+            'access denied',
+            'forbidden',
+            'cloudflare',
+            'checking your browser',
+            'please wait while we',
+            'security check',
+            'ray id',
+            'attention required',
+            'sucuri website firewall',
+            'wordfence',
+        ];
+
+        foreach ($blockPatterns as $pattern) {
+            if (stripos($htmlLower, $pattern) !== false) {
+                if (stripos($htmlLower, 'cloudflare') !== false && 
+                    stripos($htmlLower, 'challenge') !== false) {
+                    return true;
+                }
+                
+                if (in_array($statusCode, [403, 503]) || 
+                    stripos($htmlLower, 'request rejected') !== false ||
+                    stripos($htmlLower, 'access denied') !== false) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Deteksi keyword
      */
     protected function detectKeywords($text)
     {
         $foundKeywords = [];
 
-        // Check specific keywords (kombinasi 2-3 kata)
         foreach ($this->specificKeywords as $keyword) {
             if (preg_match('/\b' . preg_quote($keyword, '/') . '\b/i', $text)) {
                 $foundKeywords[] = $keyword;
             }
         }
 
-        // Check single keywords (whole word only)
         $singleMatches = [];
         foreach ($this->singleKeywords as $keyword) {
             if (preg_match('/\b' . preg_quote($keyword, '/') . '\b/i', $text)) {
@@ -389,10 +478,8 @@ class ContentScannerService
             }
         }
 
-        // Gabungkan semua keyword yang ditemukan
         $allFoundKeywords = array_merge($foundKeywords, $singleMatches);
 
-        // Rule: Suspicious jika ada minimal 1 specific keyword ATAU minimal 2 single keyword
         $isSuspicious = !empty($foundKeywords) || count($singleMatches) >= 2;
 
         return [
