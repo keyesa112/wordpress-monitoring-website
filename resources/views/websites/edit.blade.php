@@ -41,6 +41,37 @@
                     @enderror
                 </div>
 
+                {{-- NEW: Server Path Field untuk File Monitoring --}}
+                <div class="form-group">
+                    <label for="server_path">
+                        <i class="fas fa-folder"></i> Server Path (File Monitoring)
+                        <span class="badge badge-info badge-sm ml-1">Opsional</span>
+                    </label>
+                    <input type="text" 
+                           class="form-control @error('server_path') is-invalid @enderror" 
+                           id="server_path" 
+                           name="server_path" 
+                           value="{{ old('server_path', $website->server_path) }}"
+                           placeholder="Contoh: /home/username/public_html atau /var/www/html">
+                    @error('server_path')
+                        <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                    <small class="form-text text-muted">
+                        <i class="fas fa-info-circle"></i> 
+                        Path absolut ke folder root website di server (untuk File Integrity Monitoring).
+                        <br>
+                        @if($website->server_path)
+                            <span class="badge badge-success">
+                                <i class="fas fa-check-circle"></i> File Monitoring Enabled
+                            </span>
+                        @else
+                            <span class="badge badge-secondary">
+                                <i class="fas fa-times-circle"></i> File Monitoring Disabled
+                            </span>
+                        @endif
+                    </small>
+                </div>
+
                 <div class="form-group">
                     <label for="notes">Catatan</label>
                     <textarea class="form-control @error('notes') is-invalid @enderror" 
@@ -68,15 +99,43 @@
                         Jika dinonaktifkan, website tidak akan dicek secara otomatis
                     </small>
                 </div>
+
+                {{-- Info Alert --}}
+                @if(!$website->server_path)
+                <div class="alert alert-warning">
+                    <h5><i class="icon fas fa-exclamation-triangle"></i> File Monitoring Tidak Aktif</h5>
+                    Isi <strong>Server Path</strong> untuk mengaktifkan File Integrity Monitoring (deteksi perubahan file mencurigakan).
+                </div>
+                @else
+                <div class="alert alert-success">
+                    <h5><i class="icon fas fa-check-circle"></i> File Monitoring Aktif</h5>
+                    <ul class="mb-0 pl-3">
+                        <li>Server Path: <code>{{ $website->server_path }}</code></li>
+                        <li>Anda dapat membuat baseline dan scan file di halaman detail website.</li>
+                    </ul>
+                </div>
+                @endif
             </div>
             <div class="card-footer">
                 <button type="submit" class="btn btn-primary">
                     <i class="fas fa-save"></i> Update
                 </button>
+                <a href="{{ route('websites.show', $website) }}" class="btn btn-info">
+                    <i class="fas fa-eye"></i> Lihat Detail
+                </a>
                 <a href="{{ route('websites.index') }}" class="btn btn-secondary">
-                    <i class="fas fa-times"></i> Batal
+                    <i class="fas fa-arrow-left"></i> Kembali
                 </a>
             </div>
         </form>
     </div>
+@stop
+
+@section('css')
+<style>
+    .badge-sm {
+        font-size: 0.75rem;
+        padding: 0.2rem 0.4rem;
+    }
+</style>
 @stop

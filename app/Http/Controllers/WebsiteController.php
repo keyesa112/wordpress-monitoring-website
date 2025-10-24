@@ -4,9 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\Website;
 use App\Models\MonitoringLog;
+use App\Models\FileChange;
 use App\Services\WebsiteCheckService;
 use App\Services\ContentScannerService;
 use App\Services\RecommendationService;
+use App\Services\FileMonitorService;
 use Illuminate\Http\Request;
 
 class WebsiteController extends Controller
@@ -14,15 +16,18 @@ class WebsiteController extends Controller
     protected $checkService;
     protected $scannerService;
     protected $recommendationService;
+    protected $fileMonitorService;
     
     public function __construct(
         WebsiteCheckService $checkService,
         ContentScannerService $scannerService,
-        RecommendationService $recommendationService
+        RecommendationService $recommendationService,
+        FileMonitorService $fileMonitorService
     ) {
         $this->checkService = $checkService;
         $this->scannerService = $scannerService;
         $this->recommendationService = $recommendationService;
+        $this->fileMonitorService = $fileMonitorService;
     }
 
     /**
@@ -53,12 +58,14 @@ class WebsiteController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'url' => 'required|url|unique:websites,url',
+            'server_path' => 'nullable|string|max:500',
             'notes' => 'nullable|string',
         ]);
 
         $website = Website::create([
             'name' => $request->name,
             'url' => $request->url,
+            'server_path' => $request->server_path,
             'notes' => $request->notes,
             'status' => 'checking',
             'is_active' => true,
@@ -80,7 +87,13 @@ class WebsiteController extends Controller
             $query->orderBy('created_at', 'desc')->limit(20);
         }]);
         
-        return view('websites.show', compact('website'));
+        // Load recent file changes
+        $recentFileChanges = FileChange::where('website_id', $website->id)
+            ->orderBy('created_at', 'desc')
+            ->limit(10)
+            ->get();
+        
+        return view('websites.show', compact('website', 'recentFileChanges'));
     }
 
     /**
@@ -99,11 +112,12 @@ class WebsiteController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'url' => 'required|url|unique:websites,url,' . $website->id,
+            'server_path' => 'nullable|string|max:500',
             'notes' => 'nullable|string',
             'is_active' => 'boolean',
         ]);
 
-        $website->update($request->only(['name', 'url', 'notes', 'is_active']));
+        $website->update($request->only(['name', 'url', 'server_path', 'notes', 'is_active']));
 
         return redirect()->route('websites.index')
             ->with('success', 'Website berhasil diupdate!');
@@ -125,7 +139,7 @@ class WebsiteController extends Controller
      */
     public function check(Website $website)
     {
-        set_time_limit(300); // 5 menit untuk scan berat
+        set_time_limit(300);
         
         $this->performFullCheck($website);
 
@@ -158,40 +172,102 @@ class WebsiteController extends Controller
     }
 
     /**
+     * Create baseline for file monitoring
+     */
+    public function createFileBaseline(Website $website)
+    {
+        if (empty($website->server_path)) {
+            return redirect()->back()->with('error', 'Server path belum dikonfigurasi untuk website ini.');
+        }
+
+        if (!is_dir($website->server_path)) {
+            return redirect()->back()->with('error', 'Server path tidak valid atau tidak dapat diakses.');
+        }
+
+        try {
+            set_time_limit(600);
+            $result = $this->fileMonitorService->createBaseline($website->id, $website->server_path);
+
+            return redirect()->back()->with('success', "Baseline created: {$result['files_tracked']} files tracked.");
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', 'Error creating baseline: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Scan files and compare with baseline
+     */
+    public function scanFiles(Website $website)
+    {
+        if (empty($website->server_path)) {
+            return redirect()->back()->with('error', 'Server path belum dikonfigurasi untuk website ini.');
+        }
+
+        if (!is_dir($website->server_path)) {
+            return redirect()->back()->with('error', 'Server path tidak valid atau tidak dapat diakses.');
+        }
+
+        try {
+            set_time_limit(600);
+            $result = $this->fileMonitorService->compareWithBaseline($website->id, $website->server_path);
+
+            $message = "File scan completed: {$result['total_changes']} changes detected";
+            
+            if ($result['total_changes'] > 0) {
+                $message .= " ({$result['changes']['new']} new, {$result['changes']['modified']} modified, {$result['changes']['deleted']} deleted)";
+            }
+
+            return redirect()->back()->with('success', $message);
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', 'Error scanning files: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Show file changes
+     */
+    public function fileChanges(Website $website)
+    {
+        $changes = FileChange::where('website_id', $website->id)
+            ->orderBy('created_at', 'desc')
+            ->paginate(50);
+
+        $suspiciousCount = FileChange::where('website_id', $website->id)
+            ->where('is_suspicious', true)
+            ->count();
+
+        return view('websites.file-changes', compact('website', 'changes', 'suspiciousCount'));
+    }
+
+    /**
      * Perform full check (status + content scan) dengan recommendations
      */
     protected function performFullCheck(Website $website)
     {
-        // Update status ke checking
         $website->update(['status' => 'checking']);
 
-        // Cek status (ping)
         $statusResult = $this->checkService->checkStatus($website->url);
-        
-        // Scan konten lengkap (posts, header/footer, meta, sitemap)
         $contentResult = $this->scannerService->scanContent($website->url);
 
-        // Prepare data untuk recommendation engine
         $fullScanResult = [
             'status' => $statusResult,
             'posts' => $contentResult['posts'],
+            'pages' => $contentResult['pages'], // ✅ ADDED
             'header_footer' => $contentResult['header_footer'],
             'meta' => $contentResult['meta'],
             'sitemap' => $contentResult['sitemap'],
             'has_suspicious_content' => $contentResult['has_suspicious_content'],
         ];
 
-        // Generate recommendations
         $recommendations = $this->recommendationService->generateRecommendations($fullScanResult);
 
-        // Hitung total suspicious items
         $totalSuspicious = 
             ($contentResult['posts']['suspicious_count'] ?? 0) +
+            ($contentResult['pages']['suspicious_count'] ?? 0) + // ✅ ADDED
             ($contentResult['header_footer']['keyword_count'] ?? 0) +
             ($contentResult['meta']['keyword_count'] ?? 0) +
             ($contentResult['sitemap']['keyword_count'] ?? 0);
 
-        // Compress result untuk save ke database (hindari data too long)
         $compressedResult = [
             'status' => [
                 'status' => $statusResult['status'],
@@ -206,8 +282,16 @@ class WebsiteController extends Controller
                     'has_suspicious' => $contentResult['posts']['has_suspicious'] ?? false,
                     'total_posts' => $contentResult['posts']['total_posts'] ?? 0,
                     'suspicious_count' => $contentResult['posts']['suspicious_count'] ?? 0,
-                    'suspicious_posts' => array_slice($contentResult['posts']['suspicious_posts'] ?? [], 0, 20), // Max 20 posts
+                    'suspicious_posts' => array_slice($contentResult['posts']['suspicious_posts'] ?? [], 0, 20),
                     'error' => $contentResult['posts']['error'] ?? null,
+                ],
+                // ✅ ADDED PAGES
+                'pages' => [
+                    'has_suspicious' => $contentResult['pages']['has_suspicious'] ?? false,
+                    'total_pages' => $contentResult['pages']['total_pages'] ?? 0,
+                    'suspicious_count' => $contentResult['pages']['suspicious_count'] ?? 0,
+                    'suspicious_pages' => array_slice($contentResult['pages']['suspicious_pages'] ?? [], 0, 20),
+                    'error' => $contentResult['pages']['error'] ?? null,
                 ],
                 'header_footer' => [
                     'has_suspicious' => $contentResult['header_footer']['has_suspicious'] ?? false,
@@ -227,7 +311,7 @@ class WebsiteController extends Controller
                     'has_suspicious' => $contentResult['sitemap']['has_suspicious'] ?? false,
                     'keyword_count' => $contentResult['sitemap']['keyword_count'] ?? 0,
                     'keywords' => $contentResult['sitemap']['keywords'] ?? [],
-                    'suspicious_urls' => array_slice($contentResult['sitemap']['suspicious_urls'] ?? [], 0, 10), // Max 10 URLs
+                    'suspicious_urls' => array_slice($contentResult['sitemap']['suspicious_urls'] ?? [], 0, 10),
                     'error' => $contentResult['sitemap']['error'] ?? null,
                 ],
                 'has_suspicious_content' => $contentResult['has_suspicious_content'],
@@ -235,7 +319,6 @@ class WebsiteController extends Controller
             'recommendations' => $recommendations,
         ];
 
-        // Update website
         $website->update([
             'status' => $statusResult['status'],
             'response_time' => $statusResult['response_time'],
@@ -246,7 +329,6 @@ class WebsiteController extends Controller
             'last_checked_at' => now(),
         ]);
 
-        // Simpan log
         MonitoringLog::create([
             'website_id' => $website->id,
             'check_type' => 'full',
@@ -255,21 +337,19 @@ class WebsiteController extends Controller
             'http_code' => $statusResult['http_code'],
             'has_suspicious_content' => $contentResult['has_suspicious_content'],
             'suspicious_posts_count' => $totalSuspicious,
-            'suspicious_posts' => array_slice($contentResult['posts']['suspicious_posts'] ?? [], 0, 20),
+            'suspicious_posts' => array_merge(
+                array_slice($contentResult['posts']['suspicious_posts'] ?? [], 0, 10),
+                array_slice($contentResult['pages']['suspicious_pages'] ?? [], 0, 10)
+            ),
             'error_message' => $statusResult['error'] ?? $contentResult['posts']['error'] ?? null,
             'raw_result' => $compressedResult,
         ]);
     }
 
-    /**
-     * Perform status check only
-     */
     protected function performStatusCheck(Website $website)
     {
-        // Cek status (ping) saja
         $statusResult = $this->checkService->checkStatus($website->url);
 
-        // Update website
         $website->update([
             'status' => $statusResult['status'],
             'response_time' => $statusResult['response_time'],
@@ -277,7 +357,6 @@ class WebsiteController extends Controller
             'last_checked_at' => now(),
         ]);
 
-        // Simpan log
         MonitoringLog::create([
             'website_id' => $website->id,
             'check_type' => 'status',
@@ -293,18 +372,14 @@ class WebsiteController extends Controller
         ]);
     }
 
-    /**
-     * Perform content scan only
-     */
     protected function performContentScan(Website $website)
     {
-        // Scan konten saja
         $contentResult = $this->scannerService->scanContent($website->url);
 
-        // Generate recommendations
         $fullScanResult = [
             'status' => ['status' => $website->status ?? 'unknown'],
             'posts' => $contentResult['posts'],
+            'pages' => $contentResult['pages'], // ✅ ADDED
             'header_footer' => $contentResult['header_footer'],
             'meta' => $contentResult['meta'],
             'sitemap' => $contentResult['sitemap'],
@@ -313,14 +388,13 @@ class WebsiteController extends Controller
 
         $recommendations = $this->recommendationService->generateRecommendations($fullScanResult);
 
-        // Hitung total suspicious items
         $totalSuspicious = 
             ($contentResult['posts']['suspicious_count'] ?? 0) +
+            ($contentResult['pages']['suspicious_count'] ?? 0) + // ✅ ADDED
             ($contentResult['header_footer']['keyword_count'] ?? 0) +
             ($contentResult['meta']['keyword_count'] ?? 0) +
             ($contentResult['sitemap']['keyword_count'] ?? 0);
 
-        // Compress result
         $compressedResult = [
             'content' => [
                 'url' => $contentResult['url'],
@@ -329,6 +403,12 @@ class WebsiteController extends Controller
                     'has_suspicious' => $contentResult['posts']['has_suspicious'] ?? false,
                     'suspicious_count' => $contentResult['posts']['suspicious_count'] ?? 0,
                     'suspicious_posts' => array_slice($contentResult['posts']['suspicious_posts'] ?? [], 0, 20),
+                ],
+                // ✅ ADDED PAGES
+                'pages' => [
+                    'has_suspicious' => $contentResult['pages']['has_suspicious'] ?? false,
+                    'suspicious_count' => $contentResult['pages']['suspicious_count'] ?? 0,
+                    'suspicious_pages' => array_slice($contentResult['pages']['suspicious_pages'] ?? [], 0, 20),
                 ],
                 'header_footer' => [
                     'has_suspicious' => $contentResult['header_footer']['has_suspicious'] ?? false,
@@ -349,7 +429,6 @@ class WebsiteController extends Controller
             'recommendations' => $recommendations,
         ];
 
-        // Update website
         $website->update([
             'has_suspicious_content' => $contentResult['has_suspicious_content'],
             'suspicious_posts_count' => $totalSuspicious,
@@ -357,7 +436,6 @@ class WebsiteController extends Controller
             'last_checked_at' => now(),
         ]);
 
-        // Simpan log
         MonitoringLog::create([
             'website_id' => $website->id,
             'check_type' => 'content',
@@ -366,7 +444,10 @@ class WebsiteController extends Controller
             'http_code' => 0,
             'has_suspicious_content' => $contentResult['has_suspicious_content'],
             'suspicious_posts_count' => $totalSuspicious,
-            'suspicious_posts' => array_slice($contentResult['posts']['suspicious_posts'] ?? [], 0, 20),
+            'suspicious_posts' => array_merge(
+                array_slice($contentResult['posts']['suspicious_posts'] ?? [], 0, 10),
+                array_slice($contentResult['pages']['suspicious_pages'] ?? [], 0, 10)
+            ),
             'error_message' => $contentResult['posts']['error'] ?? null,
             'raw_result' => $compressedResult,
         ]);

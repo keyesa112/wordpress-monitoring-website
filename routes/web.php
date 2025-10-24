@@ -36,8 +36,16 @@ Route::middleware('auth')->group(function () {
     // Manual check website
     Route::post('/websites/{website}/check', [WebsiteController::class, 'check'])
         ->name('websites.check');
-    Route::get('/websites/{website}/check', [WebsiteController::class, 'check'])
-        ->name('websites.check');
+    // Route::get('/websites/{website}/check', [WebsiteController::class, 'check'])
+    //     ->name('websites.check');
+    
+    // File Monitoring Routes
+    Route::post('websites/{website}/file-baseline', [WebsiteController::class, 'createFileBaseline'])
+        ->name('websites.file-baseline');
+    Route::post('websites/{website}/file-scan', [WebsiteController::class, 'scanFiles'])
+        ->name('websites.file-scan');
+    Route::get('websites/{website}/file-changes', [WebsiteController::class, 'fileChanges'])
+        ->name('websites.file-changes');
     
     // Profile
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');

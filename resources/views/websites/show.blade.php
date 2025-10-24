@@ -14,6 +14,23 @@
     </div>
     @endif
 
+    @if(session('error'))
+    <div class="alert alert-danger alert-dismissible fade show">
+        <button type="button" class="close" data-dismiss="alert">&times;</button>
+        {{ session('error') }}
+    </div>
+    @endif
+
+    {{-- File Changes Alert --}}
+    @if(isset($recentFileChanges) && $recentFileChanges->where('is_suspicious', true)->count() > 0)
+    <div class="alert alert-danger alert-dismissible fade show">
+        <button type="button" class="close" data-dismiss="alert">&times;</button>
+        <h5><i class="icon fas fa-exclamation-triangle"></i> File Monitoring Alert!</h5>
+        Terdeteksi <strong>{{ $recentFileChanges->where('is_suspicious', true)->count() }} file mencurigakan</strong> dalam monitoring terakhir.
+        <a href="{{ route('websites.file-changes', $website) }}" class="alert-link">Lihat Detail →</a>
+    </div>
+    @endif
+
     {{-- Website Info --}}
     <div class="row">
         <div class="col-md-8">
@@ -76,6 +93,17 @@
                                 @endif
                             </td>
                         </tr>
+                        @if($website->server_path)
+                        <tr>
+                            <th>Server Path</th>
+                            <td>
+                                <code>{{ $website->server_path }}</code>
+                                <span class="badge badge-info ml-2">
+                                    <i class="fas fa-folder"></i> FIM Enabled
+                                </span>
+                            </td>
+                        </tr>
+                        @endif
                         @if($website->notes)
                         <tr>
                             <th>Catatan</th>
@@ -107,6 +135,23 @@
             </div>
             @endif
 
+            {{-- File Changes Info Box --}}
+            @if(isset($recentFileChanges) && $recentFileChanges->count() > 0)
+            <div class="info-box bg-{{ $recentFileChanges->where('is_suspicious', true)->count() > 0 ? 'danger' : 'secondary' }}">
+                <span class="info-box-icon"><i class="fas fa-file-code"></i></span>
+                <div class="info-box-content">
+                    <span class="info-box-text">Perubahan File</span>
+                    <span class="info-box-number">{{ $recentFileChanges->count() }}</span>
+                    <div class="progress">
+                        <div class="progress-bar" style="width: {{ $recentFileChanges->where('is_suspicious', true)->count() > 0 ? '100' : '0' }}%"></div>
+                    </div>
+                    <span class="progress-description">
+                        {{ $recentFileChanges->where('is_suspicious', true)->count() }} suspicious
+                    </span>
+                </div>
+            </div>
+            @endif
+
             <div class="card">
                 <div class="card-header">
                     <h3 class="card-title">Aksi Cepat</h3>
@@ -121,6 +166,38 @@
                             <i class="fas fa-sync"></i> Cek Ulang Sekarang
                         </button>
                     </form>
+                    
+                    {{-- File Monitoring Actions --}}
+                    @if($website->server_path)
+                    <hr>
+                    <h6 class="text-muted mb-2"><i class="fas fa-shield-alt"></i> File Integrity Monitoring</h6>
+                    <form action="{{ route('websites.file-baseline', $website) }}" method="POST">
+                        @csrf
+                        <button type="submit" class="btn btn-info btn-block btn-sm" title="Create initial file snapshot">
+                            <i class="fas fa-camera"></i> Create Baseline
+                        </button>
+                    </form>
+                    <form action="{{ route('websites.file-scan', $website) }}" method="POST">
+                        @csrf
+                        <button type="submit" class="btn btn-primary btn-block btn-sm" title="Scan for file changes">
+                            <i class="fas fa-search"></i> Scan Files
+                        </button>
+                    </form>
+                    <a href="{{ route('websites.file-changes', $website) }}" class="btn btn-secondary btn-block btn-sm">
+                        <i class="fas fa-list"></i> View All Changes
+                    </a>
+                    @else
+                    <hr>
+                    <div class="alert alert-warning mb-0 py-2">
+                        <small>
+                            <i class="fas fa-info-circle"></i> 
+                            <strong>File Monitoring belum aktif.</strong><br>
+                            Isi Server Path di <a href="{{ route('websites.edit', $website) }}" class="alert-link">Edit</a> untuk mengaktifkan FIM.
+                        </small>
+                    </div>
+                    @endif
+                    
+                    <hr>
                     <form action="{{ route('websites.destroy', $website) }}" 
                           method="POST" 
                           onsubmit="return confirm('Yakin ingin menghapus website ini?')">
@@ -135,7 +212,147 @@
         </div>
     </div>
 
-    {{-- Full Scan Results dengan Accordion (ALL COLLAPSED) --}}
+    {{-- Recent File Changes Section --}}
+    @if(isset($recentFileChanges) && $recentFileChanges->count() > 0)
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card card-warning collapsed-card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-file-code"></i> 
+                        Perubahan File Terbaru (10 Terakhir)
+                        @php
+                            $newCount = $recentFileChanges->where('change_type', 'new')->count();
+                            $modifiedCount = $recentFileChanges->where('change_type', 'modified')->count();
+                            $deletedCount = $recentFileChanges->where('change_type', 'deleted')->count();
+                            $suspiciousCount = $recentFileChanges->where('is_suspicious', true)->count();
+                        @endphp
+                        @if($suspiciousCount > 0)
+                            <span class="badge badge-danger ml-2">{{ $suspiciousCount }} Suspicious</span>
+                        @endif
+                        @if($newCount > 0)
+                            <span class="badge badge-success ml-1">{{ $newCount }} New</span>
+                        @endif
+                        @if($modifiedCount > 0)
+                            <span class="badge badge-warning ml-1">{{ $modifiedCount }} Modified</span>
+                        @endif
+                        @if($deletedCount > 0)
+                            <span class="badge badge-secondary ml-1">{{ $deletedCount }} Deleted</span>
+                        @endif
+                    </h3>
+                    <div class="card-tools">
+                        <button type="button" class="btn btn-tool" data-card-widget="collapse">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body p-0" style="display: none;">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th style="width: 45%">File Path</th>
+                                <th style="width: 10%">Type</th>
+                                <th style="width: 10%">Severity</th>
+                                <th style="width: 20%">Detected At</th>
+                                <th style="width: 15%">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($recentFileChanges as $change)
+                            <tr class="{{ $change->is_suspicious ? 'table-danger' : '' }}">
+                                <td>
+                                    <small><code>{{ Str::limit($change->file_path, 60) }}</code></small>
+                                    @if($change->is_suspicious)
+                                        <i class="fas fa-exclamation-triangle text-danger ml-1" title="Suspicious file"></i>
+                                    @endif
+                                </td>
+                                <td>{!! $change->change_type_badge !!}</td>
+                                <td>{!! $change->severity_badge !!}</td>
+                                <td>
+                                    <small>{{ $change->created_at->format('d M Y H:i') }}</small>
+                                </td>
+                                <td>
+                                    <button class="btn btn-xs btn-info" 
+                                            data-toggle="modal" 
+                                            data-target="#fileModal{{ $change->id }}">
+                                        <i class="fas fa-eye"></i> Detail
+                                    </button>
+                                </td>
+                            </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                    <div class="card-footer text-center">
+                        <a href="{{ route('websites.file-changes', $website) }}" class="btn btn-sm btn-primary">
+                            <i class="fas fa-list"></i> View All Changes
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- File Change Detail Modals --}}
+    @foreach($recentFileChanges as $change)
+    <div class="modal fade" id="fileModal{{ $change->id }}" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-{{ $change->severity === 'critical' ? 'danger' : ($change->severity === 'warning' ? 'warning' : 'info') }}">
+                    <h5 class="modal-title">
+                        <i class="fas fa-file-code"></i> File Change Details
+                    </h5>
+                    <button type="button" class="close" data-dismiss="modal">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-3">File Path:</dt>
+                        <dd class="col-sm-9"><code>{{ $change->file_path }}</code></dd>
+                        
+                        <dt class="col-sm-3">Change Type:</dt>
+                        <dd class="col-sm-9">{!! $change->change_type_badge !!}</dd>
+                        
+                        <dt class="col-sm-3">Severity:</dt>
+                        <dd class="col-sm-9">{!! $change->severity_badge !!}</dd>
+                        
+                        <dt class="col-sm-3">Suspicious:</dt>
+                        <dd class="col-sm-9">
+                            @if($change->is_suspicious)
+                                <span class="badge badge-danger">YES</span>
+                            @else
+                                <span class="badge badge-success">NO</span>
+                            @endif
+                        </dd>
+                        
+                        @if($change->suspicious_patterns)
+                        <dt class="col-sm-3">Patterns Found:</dt>
+                        <dd class="col-sm-9">
+                            @foreach($change->suspicious_patterns as $pattern)
+                                <span class="badge badge-danger mr-1 mb-1">{{ $pattern }}</span>
+                            @endforeach
+                        </dd>
+                        @endif
+                        
+                        <dt class="col-sm-3">Recommendation:</dt>
+                        <dd class="col-sm-9">{{ $change->recommendation }}</dd>
+                        
+                        @if($change->file_preview)
+                        <dt class="col-sm-3">File Preview:</dt>
+                        <dd class="col-sm-9">
+                            <pre class="bg-light p-2 border" style="max-height: 300px; overflow-y: auto; font-size: 0.85rem;">{{ $change->file_preview }}</pre>
+                        </dd>
+                        @endif
+                    </dl>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    @endforeach
+    @endif
+
+    {{-- Full Scan Results dengan Accordion --}}
     @if($website->has_suspicious_content && $website->last_check_result)
     @php
         $lastResult = json_decode($website->last_check_result, true);
@@ -150,6 +367,10 @@
         if (empty($suspiciousPosts)) {
             $suspiciousPosts = $lastResult['backlink']['suspicious_posts'] ?? [];
         }
+        
+        // ✅ PAGES
+        $pages = $contentScan['pages'] ?? [];
+        $suspiciousPages = $pages['suspicious_pages'] ?? [];
         
         // Header/Footer
         $headerFooter = $contentScan['header_footer'] ?? [];
@@ -167,6 +388,7 @@
         // Hitung total section
         $totalSections = 0;
         if (!empty($suspiciousPosts)) $totalSections++;
+        if (!empty($suspiciousPages)) $totalSections++; // ✅ ADDED
         if (!empty($headerFooterKeywords)) $totalSections++;
         if (!empty($metaKeywords)) $totalSections++;
         if (!empty($sitemapKeywords)) $totalSections++;
@@ -187,12 +409,11 @@
                 <div class="card-body">
                     <div id="accordionDetection">
                         
-                        {{-- Posts Section (COLLAPSED) --}}
+                        {{-- Posts Section --}}
                         @if(!empty($suspiciousPosts))
                         <div class="card">
                             <div class="card-header" id="headingPosts">
                                 <h5 class="mb-0">
-                                    {{-- COLLAPSED --}}
                                     <button class="btn btn-link collapsed" data-toggle="collapse" data-target="#collapsePosts" aria-expanded="false" aria-controls="collapsePosts">
                                         <i class="fas fa-file-alt text-danger"></i> 
                                         <strong>Posts Mencurigakan ({{ count($suspiciousPosts) }})</strong>
@@ -200,7 +421,6 @@
                                 </h5>
                             </div>
 
-                            {{-- COLLAPSE (TIDAK ADA SHOW) --}}
                             <div id="collapsePosts" class="collapse" aria-labelledby="headingPosts" data-parent="#accordionDetection">
                                 <div class="card-body p-0">
                                     <table class="table table-sm table-hover mb-0">
@@ -238,7 +458,56 @@
                         </div>
                         @endif
 
-                        {{-- Header/Footer Section (COLLAPSED) --}}
+                        {{-- ✅ PAGES SECTION (NEW) --}}
+                        @if(!empty($suspiciousPages))
+                        <div class="card">
+                            <div class="card-header" id="headingPages">
+                                <h5 class="mb-0">
+                                    <button class="btn btn-link collapsed" data-toggle="collapse" data-target="#collapsePages" aria-expanded="false" aria-controls="collapsePages">
+                                        <i class="fas fa-file text-danger"></i> 
+                                        <strong>Pages Mencurigakan ({{ count($suspiciousPages) }})</strong>
+                                    </button>
+                                </h5>
+                            </div>
+
+                            <div id="collapsePages" class="collapse" aria-labelledby="headingPages" data-parent="#accordionDetection">
+                                <div class="card-body p-0">
+                                    <table class="table table-sm table-hover mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th style="width: 40%">Judul Page</th>
+                                                <th style="width: 35%">Keyword Terdeteksi</th>
+                                                <th style="width: 15%">Tanggal</th>
+                                                <th style="width: 10%">Aksi</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach($suspiciousPages as $page)
+                                            <tr>
+                                                <td>{{ $page['title'] }}</td>
+                                                <td>
+                                                    @foreach($page['keywords'] as $keyword)
+                                                        <span class="badge badge-danger">{{ $keyword }}</span>
+                                                    @endforeach
+                                                </td>
+                                                <td>
+                                                    <small>{{ \Carbon\Carbon::parse($page['date'])->format('d M Y') }}</small>
+                                                </td>
+                                                <td>
+                                                    <a href="{{ $page['link'] }}" target="_blank" class="btn btn-xs btn-primary">
+                                                        <i class="fas fa-external-link-alt"></i> Buka
+                                                    </a>
+                                                </td>
+                                            </tr>
+                                            @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        @endif
+
+                        {{-- Header/Footer Section --}}
                         @if(!empty($headerFooterKeywords))
                         <div class="card">
                             <div class="card-header" id="headingHeader">
@@ -269,7 +538,7 @@
                         </div>
                         @endif
 
-                        {{-- Meta Tags Section (COLLAPSED) --}}
+                        {{-- Meta Tags Section --}}
                         @if(!empty($metaKeywords))
                         <div class="card">
                             <div class="card-header" id="headingMeta">
@@ -308,7 +577,7 @@
                         </div>
                         @endif
 
-                        {{-- Sitemap Section (COLLAPSED) --}}
+                        {{-- Sitemap Section --}}
                         @if(!empty($sitemapKeywords))
                         <div class="card">
                             <div class="card-header" id="headingSitemap">
@@ -363,7 +632,7 @@
     </div>
     @endif
 
-    {{-- Recommendations Section (ACCORDION STYLE - ALL COLLAPSED) --}}
+    {{-- Recommendations Section --}}
     @if($website->last_check_result)
     @php
         $lastResult = json_decode($website->last_check_result, true);
@@ -396,7 +665,6 @@
                         <div class="card">
                             <div class="card-header" id="headingRec{{ $index }}">
                                 <h5 class="mb-0">
-                                    {{-- SEMUA COLLAPSED --}}
                                     <button class="btn btn-link collapsed" 
                                             data-toggle="collapse" 
                                             data-target="#collapseRec{{ $index }}" 
@@ -424,7 +692,6 @@
                                 </h5>
                             </div>
 
-                            {{-- SEMUA COLLAPSE (TIDAK ADA SHOW) --}}
                             <div id="collapseRec{{ $index }}" 
                                  class="collapse" 
                                  aria-labelledby="headingRec{{ $index }}" 
@@ -541,7 +808,6 @@
         padding: 0.4rem 0.6rem;
     }
     
-    /* Accordion Styles - Berlaku untuk kedua accordion */
     #accordionRecommendations .card,
     #accordionDetection .card {
         margin-bottom: 0.5rem;
@@ -571,7 +837,6 @@
         background-color: #fff;
     }
     
-    /* Border untuk alert severity */
     .border-left-danger {
         border-left: 3px solid #dc3545 !important;
     }

@@ -45,6 +45,13 @@ class ContentScannerService
         'double win slots',
         'vegas casino',
         'fortune scratch life: earn cash',
+        'info link gacor',
+        'new member dapat freechip',
+        'bonus chip gratis',
+        'gampang menang',
+        'toto12',
+        'dana toto',
+        'partai togel',
     ];
 
     /**
@@ -65,6 +72,8 @@ class ContentScannerService
         'winrate',
         'gamble',
         'domino',
+        'chip',
+        'freechip',
     ];
 
     public function __construct()
@@ -72,7 +81,7 @@ class ContentScannerService
         $this->client = new Client([
             'timeout' => 20,
             'connect_timeout' => 10,
-            'verify' => false, // SSL verification disabled
+            'verify' => false,
             'headers' => [
                 'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
@@ -95,13 +104,13 @@ class ContentScannerService
      */
     public function scanContent($url)
     {
-        // Set execution time limit
-        set_time_limit(300); // 5 menit
+        set_time_limit(300);
         
         $results = [
             'url' => $url,
             'scanned_at' => now()->toDateTimeString(),
             'posts' => $this->scanPosts($url),
+            'pages' => $this->scanPages($url), // ✅ ADDED
             'header_footer' => $this->scanHeaderFooter($url),
             'meta' => $this->scanMeta($url),
             'sitemap' => $this->scanSitemap($url),
@@ -110,6 +119,7 @@ class ContentScannerService
         // Summary
         $results['has_suspicious_content'] = 
             $results['posts']['has_suspicious'] ||
+            $results['pages']['has_suspicious'] || // ✅ ADDED
             $results['header_footer']['has_suspicious'] ||
             $results['meta']['has_suspicious'] ||
             $results['sitemap']['has_suspicious'];
@@ -221,7 +231,110 @@ class ContentScannerService
     }
 
     /**
-     * Fetch multiple pages concurrently
+     * ✅ NEW: Scan pages via WP-JSON dengan pagination concurrent
+     */
+    public function scanPages($url)
+    {
+        try {
+            $baseUrl = rtrim($url, '/');
+            $perPage = 100;
+            
+            $firstPageUrl = $baseUrl . "/wp-json/wp/v2/pages?per_page={$perPage}&page=1";
+            
+            try {
+                $response = $this->client->get($firstPageUrl);
+            } catch (\Exception $e) {
+                return [
+                    'has_suspicious' => false,
+                    'total_pages' => 0,
+                    'suspicious_count' => 0,
+                    'suspicious_pages' => [],
+                    'error' => 'Gagal akses WP-JSON Pages',
+                ];
+            }
+
+            if ($response->getStatusCode() !== 200) {
+                return [
+                    'has_suspicious' => false,
+                    'total_pages' => 0,
+                    'suspicious_count' => 0,
+                    'suspicious_pages' => [],
+                    'error' => 'Gagal akses WP-JSON Pages (HTTP ' . $response->getStatusCode() . ')',
+                ];
+            }
+
+            $totalPaginationPages = (int) $response->getHeaderLine('X-WP-TotalPages');
+            $totalItems = (int) $response->getHeaderLine('X-WP-Total');
+            
+            if ($totalPaginationPages === 0) {
+                $totalPaginationPages = 1;
+            }
+
+            $maxPages = min($totalPaginationPages, 50);
+
+            $allPages = json_decode($response->getBody()->getContents(), true);
+
+            if ($maxPages > 1) {
+                $additionalPages = $this->fetchPagesConcurrently($baseUrl, $perPage, 2, $maxPages);
+                $allPages = array_merge($allPages, $additionalPages);
+            }
+
+            if (empty($allPages) || !is_array($allPages)) {
+                return [
+                    'has_suspicious' => false,
+                    'total_pages' => 0,
+                    'suspicious_count' => 0,
+                    'suspicious_pages' => [],
+                    'error' => 'Tidak ada pages ditemukan',
+                ];
+            }
+
+            $suspiciousPages = [];
+
+            foreach ($allPages as $page) {
+                $content = strtolower($page['content']['rendered'] ?? '');
+                $title = strtolower($page['title']['rendered'] ?? '');
+                $excerpt = strtolower($page['excerpt']['rendered'] ?? '');
+
+                $fullText = $content . ' ' . $title . ' ' . $excerpt;
+
+                $foundKeywords = $this->detectKeywords($fullText);
+
+                if ($foundKeywords['is_suspicious']) {
+                    $suspiciousPages[] = [
+                        'id' => $page['id'],
+                        'title' => $page['title']['rendered'] ?? 'No title',
+                        'link' => $page['link'] ?? '',
+                        'keywords' => $foundKeywords['keywords'],
+                        'keyword_count' => count($foundKeywords['keywords']),
+                        'date' => $page['date'] ?? '',
+                    ];
+                }
+            }
+
+            return [
+                'has_suspicious' => !empty($suspiciousPages),
+                'total_pages' => count($allPages),
+                'total_pages_available' => $totalItems,
+                'total_pagination_scanned' => $maxPages,
+                'suspicious_count' => count($suspiciousPages),
+                'suspicious_pages' => $suspiciousPages,
+                'error' => null,
+            ];
+
+        } catch (\Exception $e) {
+            return [
+                'has_suspicious' => false,
+                'total_pages' => 0,
+                'suspicious_count' => 0,
+                'suspicious_pages' => [],
+                'error' => $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Fetch multiple posts pages concurrently
      */
     protected function fetchPostsConcurrently($baseUrl, $perPage, $startPage, $endPage)
     {
@@ -251,6 +364,39 @@ class ContentScannerService
         $promise->wait();
 
         return $allPosts;
+    }
+
+    /**
+     * ✅ NEW: Fetch multiple pages concurrently
+     */
+    protected function fetchPagesConcurrently($baseUrl, $perPage, $startPage, $endPage)
+    {
+        $allPages = [];
+        
+        $requests = function () use ($baseUrl, $perPage, $startPage, $endPage) {
+            for ($page = $startPage; $page <= $endPage; $page++) {
+                $url = $baseUrl . "/wp-json/wp/v2/pages?per_page={$perPage}&page={$page}";
+                yield new Request('GET', $url);
+            }
+        };
+
+        $pool = new Pool($this->client, $requests(), [
+            'concurrency' => 5,
+            'fulfilled' => function ($response, $index) use (&$allPages) {
+                $pages = json_decode($response->getBody()->getContents(), true);
+                if (is_array($pages)) {
+                    $allPages = array_merge($allPages, $pages);
+                }
+            },
+            'rejected' => function ($reason, $index) {
+                // Silent error handling
+            },
+        ]);
+
+        $promise = $pool->promise();
+        $promise->wait();
+
+        return $allPages;
     }
 
     /**

@@ -12,6 +12,7 @@ class Website extends Model
     protected $fillable = [
         'name',
         'url',
+        'server_path', 
         'status',
         'response_time',
         'http_code',
