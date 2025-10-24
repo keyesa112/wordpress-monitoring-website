@@ -34,9 +34,10 @@ Route::middleware('auth')->group(function () {
     Route::resource('websites', WebsiteController::class);
     
     // Manual check website
-    Route::post('/websites/{website}/check', [WebsiteController::class, 'check'])->name('websites.check');
-    Route::get('/websites/{website}/check', [WebsiteController::class, 'check'])->name('websites.check');
-
+    Route::post('/websites/{website}/check', [WebsiteController::class, 'check'])
+        ->name('websites.check');
+    Route::get('/websites/{website}/check', [WebsiteController::class, 'check'])
+        ->name('websites.check');
     
     // Profile
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
@@ -46,12 +47,19 @@ Route::middleware('auth')->group(function () {
 
 // Test routes (untuk development - nanti bisa dihapus)
 Route::middleware('auth')->prefix('test')->group(function () {
-    Route::get('/ping', [TestController::class, 'testPing']);
-    Route::get('/posts', [TestController::class, 'testPosts']);
-    Route::get('/header-footer', [TestController::class, 'testHeaderFooter']);
-    Route::get('/meta', [TestController::class, 'testMeta']);
-    Route::get('/sitemap', [TestController::class, 'testSitemap']);
-    Route::get('/full-scan', [TestController::class, 'testFullScan']);
+    // Scanner tests
+    Route::get('/ping', [TestController::class, 'testPing'])->name('test.ping');
+    Route::get('/posts', [TestController::class, 'testPosts'])->name('test.posts');
+    Route::get('/header-footer', [TestController::class, 'testHeaderFooter'])->name('test.header-footer');
+    Route::get('/meta', [TestController::class, 'testMeta'])->name('test.meta');
+    Route::get('/sitemap', [TestController::class, 'testSitemap'])->name('test.sitemap');
+    Route::get('/full-scan', [TestController::class, 'testFullScan'])->name('test.full-scan');
+    
+    // Recommendation tests
+    Route::get('/recommendations', [TestController::class, 'testRecommendations'])
+        ->name('test.recommendations');
+    Route::get('/recommendations-dummy', [TestController::class, 'testRecommendationsDummy'])
+        ->name('test.recommendations-dummy');
 });
 
 require __DIR__.'/auth.php';

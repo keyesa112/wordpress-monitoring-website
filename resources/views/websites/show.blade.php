@@ -135,19 +135,18 @@
         </div>
     </div>
 
-    {{-- Full Scan Results dengan Accordion --}}
+    {{-- Full Scan Results dengan Accordion (ALL COLLAPSED) --}}
     @if($website->has_suspicious_content && $website->last_check_result)
     @php
         $lastResult = json_decode($website->last_check_result, true);
         
-        // Cek apakah ada data content (format baru) atau backlink (format lama)
         $contentScan = $lastResult['content'] ?? [];
         
         // Posts
         $posts = $contentScan['posts'] ?? [];
         $suspiciousPosts = $posts['suspicious_posts'] ?? [];
         
-        // Fallback ke format lama jika format baru tidak ada
+        // Fallback ke format lama
         if (empty($suspiciousPosts)) {
             $suspiciousPosts = $lastResult['backlink']['suspicious_posts'] ?? [];
         }
@@ -165,7 +164,7 @@
         $sitemapKeywords = $sitemap['keywords'] ?? [];
         $sitemapUrls = $sitemap['suspicious_urls'] ?? [];
         
-        // Hitung total section yang ada konten mencurigakan
+        // Hitung total section
         $totalSections = 0;
         if (!empty($suspiciousPosts)) $totalSections++;
         if (!empty($headerFooterKeywords)) $totalSections++;
@@ -186,23 +185,25 @@
                     </h3>
                 </div>
                 <div class="card-body">
-                    <div id="accordion">
+                    <div id="accordionDetection">
                         
-                        {{-- Posts Section --}}
+                        {{-- Posts Section (COLLAPSED) --}}
                         @if(!empty($suspiciousPosts))
                         <div class="card">
                             <div class="card-header" id="headingPosts">
                                 <h5 class="mb-0">
-                                    <button class="btn btn-link" data-toggle="collapse" data-target="#collapsePosts" aria-expanded="true" aria-controls="collapsePosts">
+                                    {{-- COLLAPSED --}}
+                                    <button class="btn btn-link collapsed" data-toggle="collapse" data-target="#collapsePosts" aria-expanded="false" aria-controls="collapsePosts">
                                         <i class="fas fa-file-alt text-danger"></i> 
                                         <strong>Posts Mencurigakan ({{ count($suspiciousPosts) }})</strong>
                                     </button>
                                 </h5>
                             </div>
 
-                            <div id="collapsePosts" class="collapse show" aria-labelledby="headingPosts" data-parent="#accordion">
+                            {{-- COLLAPSE (TIDAK ADA SHOW) --}}
+                            <div id="collapsePosts" class="collapse" aria-labelledby="headingPosts" data-parent="#accordionDetection">
                                 <div class="card-body p-0">
-                                    <table class="table table-sm table-hover">
+                                    <table class="table table-sm table-hover mb-0">
                                         <thead>
                                             <tr>
                                                 <th style="width: 40%">Judul Post</th>
@@ -237,7 +238,7 @@
                         </div>
                         @endif
 
-                        {{-- Header/Footer Section --}}
+                        {{-- Header/Footer Section (COLLAPSED) --}}
                         @if(!empty($headerFooterKeywords))
                         <div class="card">
                             <div class="card-header" id="headingHeader">
@@ -248,7 +249,7 @@
                                     </button>
                                 </h5>
                             </div>
-                            <div id="collapseHeader" class="collapse" aria-labelledby="headingHeader" data-parent="#accordion">
+                            <div id="collapseHeader" class="collapse" aria-labelledby="headingHeader" data-parent="#accordionDetection">
                                 <div class="card-body">
                                     <div class="alert alert-warning">
                                         <i class="fas fa-exclamation-triangle"></i> 
@@ -268,7 +269,7 @@
                         </div>
                         @endif
 
-                        {{-- Meta Tags Section --}}
+                        {{-- Meta Tags Section (COLLAPSED) --}}
                         @if(!empty($metaKeywords))
                         <div class="card">
                             <div class="card-header" id="headingMeta">
@@ -279,7 +280,7 @@
                                     </button>
                                 </h5>
                             </div>
-                            <div id="collapseMeta" class="collapse" aria-labelledby="headingMeta" data-parent="#accordion">
+                            <div id="collapseMeta" class="collapse" aria-labelledby="headingMeta" data-parent="#accordionDetection">
                                 <div class="card-body">
                                     <div class="alert alert-info">
                                         <i class="fas fa-info-circle"></i> 
@@ -307,7 +308,7 @@
                         </div>
                         @endif
 
-                        {{-- Sitemap Section --}}
+                        {{-- Sitemap Section (COLLAPSED) --}}
                         @if(!empty($sitemapKeywords))
                         <div class="card">
                             <div class="card-header" id="headingSitemap">
@@ -318,7 +319,7 @@
                                     </button>
                                 </h5>
                             </div>
-                            <div id="collapseSitemap" class="collapse" aria-labelledby="headingSitemap" data-parent="#accordion">
+                            <div id="collapseSitemap" class="collapse" aria-labelledby="headingSitemap" data-parent="#accordionDetection">
                                 <div class="card-body">
                                     <div class="alert alert-secondary">
                                         <i class="fas fa-search"></i> 
@@ -360,6 +361,122 @@
             </div>
         </div>
     </div>
+    @endif
+
+    {{-- Recommendations Section (ACCORDION STYLE - ALL COLLAPSED) --}}
+    @if($website->last_check_result)
+    @php
+        $lastResult = json_decode($website->last_check_result, true);
+        $recommendations = $lastResult['recommendations'] ?? [];
+        $recList = $recommendations['recommendations'] ?? [];
+        $criticalCount = $recommendations['critical_count'] ?? 0;
+        $highCount = $recommendations['high_count'] ?? 0;
+    @endphp
+
+    @if(!empty($recList))
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card card-primary">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-lightbulb"></i> 
+                        Rekomendasi Penanganan
+                        <span class="badge badge-light ml-2">{{ $recommendations['total'] ?? 0 }}</span>
+                        @if($criticalCount > 0)
+                            <span class="badge badge-danger ml-1">{{ $criticalCount }} Critical</span>
+                        @endif
+                        @if($highCount > 0)
+                            <span class="badge badge-warning ml-1">{{ $highCount }} High</span>
+                        @endif
+                    </h3>
+                </div>
+                <div class="card-body">
+                    <div id="accordionRecommendations">
+                        @foreach($recList as $index => $rec)
+                        <div class="card">
+                            <div class="card-header" id="headingRec{{ $index }}">
+                                <h5 class="mb-0">
+                                    {{-- SEMUA COLLAPSED --}}
+                                    <button class="btn btn-link collapsed" 
+                                            data-toggle="collapse" 
+                                            data-target="#collapseRec{{ $index }}" 
+                                            aria-expanded="false" 
+                                            aria-controls="collapseRec{{ $index }}">
+                                        @if($rec['severity'] === 'critical')
+                                            <i class="fas fa-exclamation-circle text-danger"></i>
+                                        @elseif($rec['severity'] === 'high')
+                                            <i class="fas fa-exclamation-triangle text-warning"></i>
+                                        @elseif($rec['severity'] === 'success')
+                                            <i class="fas fa-check-circle text-success"></i>
+                                        @else
+                                            <i class="fas fa-info-circle text-info"></i>
+                                        @endif
+                                        <strong>{{ $rec['title'] }}</strong>
+                                        <span class="badge 
+                                            @if($rec['severity'] === 'critical') badge-danger
+                                            @elseif($rec['severity'] === 'high') badge-warning
+                                            @elseif($rec['severity'] === 'success') badge-success
+                                            @else badge-info
+                                            @endif ml-2">
+                                            {{ ucfirst($rec['severity']) }}
+                                        </span>
+                                    </button>
+                                </h5>
+                            </div>
+
+                            {{-- SEMUA COLLAPSE (TIDAK ADA SHOW) --}}
+                            <div id="collapseRec{{ $index }}" 
+                                 class="collapse" 
+                                 aria-labelledby="headingRec{{ $index }}" 
+                                 data-parent="#accordionRecommendations">
+                                <div class="card-body">
+                                    <div class="alert alert-light border-left-{{ $rec['severity'] === 'critical' ? 'danger' : ($rec['severity'] === 'high' ? 'warning' : 'info') }}">
+                                        <i class="fas fa-info-circle"></i> 
+                                        <strong>Deskripsi:</strong> {{ $rec['description'] }}
+                                    </div>
+                                    
+                                    @if(!empty($rec['recommendations']))
+                                    <h6 class="font-weight-bold text-success mt-3">
+                                        <i class="fas fa-check-circle"></i> Langkah Penanganan:
+                                    </h6>
+                                    <ol class="mb-3 pl-4">
+                                        @foreach($rec['recommendations'] as $recommendation)
+                                        <li class="mb-2">{{ $recommendation }}</li>
+                                        @endforeach
+                                    </ol>
+                                    @endif
+                                    
+                                    @if(!empty($rec['actions']))
+                                    <h6 class="font-weight-bold text-primary">
+                                        <i class="fas fa-wrench"></i> Cara Implementasi:
+                                    </h6>
+                                    <ul class="mb-3 pl-4">
+                                        @foreach($rec['actions'] as $action)
+                                        <li class="mb-2">{{ $action }}</li>
+                                        @endforeach
+                                    </ul>
+                                    @endif
+                                    
+                                    @if(!empty($rec['prevention']))
+                                    <h6 class="font-weight-bold text-info">
+                                        <i class="fas fa-shield-alt"></i> Pencegahan Ke Depan:
+                                    </h6>
+                                    <ul class="mb-0 pl-4">
+                                        @foreach($rec['prevention'] as $prevention)
+                                        <li class="mb-2">{{ $prevention }}</li>
+                                        @endforeach
+                                    </ul>
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+                        @endforeach
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    @endif
     @endif
 
     {{-- Monitoring Logs --}}
@@ -423,11 +540,16 @@
         font-size: 0.9rem;
         padding: 0.4rem 0.6rem;
     }
-    #accordion .card {
+    
+    /* Accordion Styles - Berlaku untuk kedua accordion */
+    #accordionRecommendations .card,
+    #accordionDetection .card {
         margin-bottom: 0.5rem;
         border: 1px solid #dee2e6;
     }
-    #accordion .btn-link {
+    
+    #accordionRecommendations .btn-link,
+    #accordionDetection .btn-link {
         text-decoration: none;
         color: #333;
         font-size: 1rem;
@@ -436,13 +558,30 @@
         text-align: left;
         padding: 0.75rem 1rem;
     }
-    #accordion .btn-link:hover {
+    
+    #accordionRecommendations .btn-link:hover,
+    #accordionDetection .btn-link:hover {
         text-decoration: none;
         background-color: #f8f9fa;
     }
-    #accordion .card-header {
+    
+    #accordionRecommendations .card-header,
+    #accordionDetection .card-header {
         padding: 0;
         background-color: #fff;
+    }
+    
+    /* Border untuk alert severity */
+    .border-left-danger {
+        border-left: 3px solid #dc3545 !important;
+    }
+    
+    .border-left-warning {
+        border-left: 3px solid #ffc107 !important;
+    }
+    
+    .border-left-info {
+        border-left: 3px solid #17a2b8 !important;
     }
 </style>
 @stop

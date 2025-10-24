@@ -37,6 +37,14 @@ class ContentScannerService
         'sbobet',
         'bonus new member slot',
         'deposit pulsa slot',
+        'toto88',
+        'markasbola365',
+        'bet777',
+        'zeus365',
+        'game penghasil uang',
+        'double win slots',
+        'vegas casino',
+        'fortune scratch life: earn cash',
     ];
 
     /**
@@ -51,6 +59,12 @@ class ContentScannerService
         'betting',
         'poker',
         'judi',
+        'jackpot',
+        'toto',
+        'fairslot',
+        'winrate',
+        'gamble',
+        'domino',
     ];
 
     public function __construct()

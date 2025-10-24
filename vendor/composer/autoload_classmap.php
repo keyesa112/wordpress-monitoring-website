@@ -27,6 +27,7 @@ return array(
     'App\\Models\\Website' => $baseDir . '/app/Models/Website.php',
     'App\\Providers\\AppServiceProvider' => $baseDir . '/app/Providers/AppServiceProvider.php',
     'App\\Services\\ContentScannerService' => $baseDir . '/app/Services/ContentScannerService.php',
+    'App\\Services\\RecommendationService' => $baseDir . '/app/Services/RecommendationService.php',
     'App\\Services\\WebsiteCheckService' => $baseDir . '/app/Services/WebsiteCheckService.php',
     'App\\View\\Components\\AppLayout' => $baseDir . '/app/View/Components/AppLayout.php',
     'App\\View\\Components\\GuestLayout' => $baseDir . '/app/View/Components/GuestLayout.php',

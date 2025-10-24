@@ -567,6 +567,7 @@ class ComposerStaticInitc514d8f7b9fc5970bdd94287905ef584
         'App\\Models\\Website' => __DIR__ . '/../..' . '/app/Models/Website.php',
         'App\\Providers\\AppServiceProvider' => __DIR__ . '/../..' . '/app/Providers/AppServiceProvider.php',
         'App\\Services\\ContentScannerService' => __DIR__ . '/../..' . '/app/Services/ContentScannerService.php',
+        'App\\Services\\RecommendationService' => __DIR__ . '/../..' . '/app/Services/RecommendationService.php',
         'App\\Services\\WebsiteCheckService' => __DIR__ . '/../..' . '/app/Services/WebsiteCheckService.php',
         'App\\View\\Components\\AppLayout' => __DIR__ . '/../..' . '/app/View/Components/AppLayout.php',
         'App\\View\\Components\\GuestLayout' => __DIR__ . '/../..' . '/app/View/Components/GuestLayout.php',
