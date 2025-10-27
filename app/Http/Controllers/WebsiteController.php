@@ -252,7 +252,7 @@ class WebsiteController extends Controller
         $fullScanResult = [
             'status' => $statusResult,
             'posts' => $contentResult['posts'],
-            'pages' => $contentResult['pages'], // ✅ ADDED
+            'pages' => $contentResult['pages'],
             'header_footer' => $contentResult['header_footer'],
             'meta' => $contentResult['meta'],
             'sitemap' => $contentResult['sitemap'],
@@ -263,7 +263,7 @@ class WebsiteController extends Controller
 
         $totalSuspicious = 
             ($contentResult['posts']['suspicious_count'] ?? 0) +
-            ($contentResult['pages']['suspicious_count'] ?? 0) + // ✅ ADDED
+            ($contentResult['pages']['suspicious_count'] ?? 0) +
             ($contentResult['header_footer']['keyword_count'] ?? 0) +
             ($contentResult['meta']['keyword_count'] ?? 0) +
             ($contentResult['sitemap']['keyword_count'] ?? 0);
@@ -283,14 +283,17 @@ class WebsiteController extends Controller
                     'total_posts' => $contentResult['posts']['total_posts'] ?? 0,
                     'suspicious_count' => $contentResult['posts']['suspicious_count'] ?? 0,
                     'suspicious_posts' => array_slice($contentResult['posts']['suspicious_posts'] ?? [], 0, 20),
+                    // ✅ NEW: Include injected HTML data
+                    'injected_html' => $contentResult['posts']['injected_html'] ?? null,
                     'error' => $contentResult['posts']['error'] ?? null,
                 ],
-                // ✅ ADDED PAGES
                 'pages' => [
                     'has_suspicious' => $contentResult['pages']['has_suspicious'] ?? false,
                     'total_pages' => $contentResult['pages']['total_pages'] ?? 0,
                     'suspicious_count' => $contentResult['pages']['suspicious_count'] ?? 0,
                     'suspicious_pages' => array_slice($contentResult['pages']['suspicious_pages'] ?? [], 0, 20),
+                    // ✅ NEW: Include injected HTML data
+                    'injected_html' => $contentResult['pages']['injected_html'] ?? null,
                     'error' => $contentResult['pages']['error'] ?? null,
                 ],
                 'header_footer' => [
@@ -379,7 +382,7 @@ class WebsiteController extends Controller
         $fullScanResult = [
             'status' => ['status' => $website->status ?? 'unknown'],
             'posts' => $contentResult['posts'],
-            'pages' => $contentResult['pages'], // ✅ ADDED
+            'pages' => $contentResult['pages'],
             'header_footer' => $contentResult['header_footer'],
             'meta' => $contentResult['meta'],
             'sitemap' => $contentResult['sitemap'],
@@ -390,7 +393,7 @@ class WebsiteController extends Controller
 
         $totalSuspicious = 
             ($contentResult['posts']['suspicious_count'] ?? 0) +
-            ($contentResult['pages']['suspicious_count'] ?? 0) + // ✅ ADDED
+            ($contentResult['pages']['suspicious_count'] ?? 0) +
             ($contentResult['header_footer']['keyword_count'] ?? 0) +
             ($contentResult['meta']['keyword_count'] ?? 0) +
             ($contentResult['sitemap']['keyword_count'] ?? 0);
@@ -403,12 +406,15 @@ class WebsiteController extends Controller
                     'has_suspicious' => $contentResult['posts']['has_suspicious'] ?? false,
                     'suspicious_count' => $contentResult['posts']['suspicious_count'] ?? 0,
                     'suspicious_posts' => array_slice($contentResult['posts']['suspicious_posts'] ?? [], 0, 20),
+                    // ✅ NEW: Include injected HTML data
+                    'injected_html' => $contentResult['posts']['injected_html'] ?? null,
                 ],
-                // ✅ ADDED PAGES
                 'pages' => [
                     'has_suspicious' => $contentResult['pages']['has_suspicious'] ?? false,
                     'suspicious_count' => $contentResult['pages']['suspicious_count'] ?? 0,
                     'suspicious_pages' => array_slice($contentResult['pages']['suspicious_pages'] ?? [], 0, 20),
+                    // ✅ NEW: Include injected HTML data
+                    'injected_html' => $contentResult['pages']['injected_html'] ?? null,
                 ],
                 'header_footer' => [
                     'has_suspicious' => $contentResult['header_footer']['has_suspicious'] ?? false,

@@ -26,6 +26,7 @@ class ContentScannerService
         'maxwin slot',
         'slot88',
         'slot77',
+        'slot777',
         'pragmatic play slot',
         'pg soft slot',
         'togel online',
@@ -52,6 +53,9 @@ class ContentScannerService
         'toto12',
         'dana toto',
         'partai togel',
+        'ladang cuan',
+        'anti rungkad',
+        'pasti jp',
     ];
 
     /**
@@ -110,7 +114,7 @@ class ContentScannerService
             'url' => $url,
             'scanned_at' => now()->toDateTimeString(),
             'posts' => $this->scanPosts($url),
-            'pages' => $this->scanPages($url), // ✅ ADDED
+            'pages' => $this->scanPages($url),
             'header_footer' => $this->scanHeaderFooter($url),
             'meta' => $this->scanMeta($url),
             'sitemap' => $this->scanSitemap($url),
@@ -119,7 +123,7 @@ class ContentScannerService
         // Summary
         $results['has_suspicious_content'] = 
             $results['posts']['has_suspicious'] ||
-            $results['pages']['has_suspicious'] || // ✅ ADDED
+            $results['pages']['has_suspicious'] ||
             $results['header_footer']['has_suspicious'] ||
             $results['meta']['has_suspicious'] ||
             $results['sitemap']['has_suspicious'];
@@ -160,6 +164,12 @@ class ContentScannerService
                 ];
             }
 
+            // ✅ Get RAW response body
+            $rawBody = $response->getBody()->getContents();
+            
+            // ✅ Check for injected HTML BEFORE JSON
+            $injectedHtml = $this->detectInjectedHtml($rawBody);
+
             $totalPages = (int) $response->getHeaderLine('X-WP-TotalPages');
             $totalPosts = (int) $response->getHeaderLine('X-WP-Total');
             
@@ -169,53 +179,54 @@ class ContentScannerService
 
             $maxPages = min($totalPages, 50);
 
-            $allPosts = json_decode($response->getBody()->getContents(), true);
+            // Parse JSON (will skip HTML automatically)
+            $allPosts = json_decode($rawBody, true) ?? [];
 
             if ($maxPages > 1) {
                 $additionalPosts = $this->fetchPostsConcurrently($baseUrl, $perPage, 2, $maxPages);
-                $allPosts = array_merge($allPosts, $additionalPosts);
-            }
-
-            if (empty($allPosts) || !is_array($allPosts)) {
-                return [
-                    'has_suspicious' => false,
-                    'total_posts' => 0,
-                    'suspicious_count' => 0,
-                    'suspicious_posts' => [],
-                    'error' => 'Tidak ada posts ditemukan',
-                ];
+                if (is_array($additionalPosts) && !empty($additionalPosts)) {
+                    $allPosts = array_merge($allPosts, $additionalPosts);
+                }
             }
 
             $suspiciousPosts = [];
 
-            foreach ($allPosts as $post) {
-                $content = strtolower($post['content']['rendered'] ?? '');
-                $title = strtolower($post['title']['rendered'] ?? '');
-                $excerpt = strtolower($post['excerpt']['rendered'] ?? '');
+            if (!empty($allPosts) && is_array($allPosts)) {
+                foreach ($allPosts as $post) {
+                    if (!is_array($post)) continue;
+                    
+                    $content = strtolower($post['content']['rendered'] ?? '');
+                    $title = strtolower($post['title']['rendered'] ?? '');
+                    $excerpt = strtolower($post['excerpt']['rendered'] ?? '');
 
-                $fullText = $content . ' ' . $title . ' ' . $excerpt;
+                    $fullText = $content . ' ' . $title . ' ' . $excerpt;
 
-                $foundKeywords = $this->detectKeywords($fullText);
+                    $foundKeywords = $this->detectKeywords($fullText);
 
-                if ($foundKeywords['is_suspicious']) {
-                    $suspiciousPosts[] = [
-                        'id' => $post['id'],
-                        'title' => $post['title']['rendered'] ?? 'No title',
-                        'link' => $post['link'] ?? '',
-                        'keywords' => $foundKeywords['keywords'],
-                        'keyword_count' => count($foundKeywords['keywords']),
-                        'date' => $post['date'] ?? '',
-                    ];
+                    if ($foundKeywords['is_suspicious']) {
+                        $suspiciousPosts[] = [
+                            'id' => $post['id'] ?? 0,
+                            'title' => $post['title']['rendered'] ?? 'No title',
+                            'link' => $post['link'] ?? '',
+                            'keywords' => $foundKeywords['keywords'],
+                            'keyword_count' => count($foundKeywords['keywords']),
+                            'date' => $post['date'] ?? '',
+                        ];
+                    }
                 }
             }
 
+            // ✅ Merge detection results
+            $hasSuspicious = !empty($suspiciousPosts) || $injectedHtml['has_suspicious'];
+
             return [
-                'has_suspicious' => !empty($suspiciousPosts),
+                'has_suspicious' => $hasSuspicious,
                 'total_posts' => count($allPosts),
                 'total_posts_available' => $totalPosts,
                 'total_pages_scanned' => $maxPages,
                 'suspicious_count' => count($suspiciousPosts),
                 'suspicious_posts' => $suspiciousPosts,
+                'injected_html' => $injectedHtml, // ✅ NEW
                 'error' => null,
             ];
 
@@ -231,7 +242,7 @@ class ContentScannerService
     }
 
     /**
-     * ✅ NEW: Scan pages via WP-JSON dengan pagination concurrent
+     * Scan pages via WP-JSON dengan pagination concurrent
      */
     public function scanPages($url)
     {
@@ -263,6 +274,12 @@ class ContentScannerService
                 ];
             }
 
+            // ✅ Get RAW response body
+            $rawBody = $response->getBody()->getContents();
+            
+            // ✅ Check for injected HTML BEFORE JSON
+            $injectedHtml = $this->detectInjectedHtml($rawBody);
+
             $totalPaginationPages = (int) $response->getHeaderLine('X-WP-TotalPages');
             $totalItems = (int) $response->getHeaderLine('X-WP-Total');
             
@@ -272,53 +289,54 @@ class ContentScannerService
 
             $maxPages = min($totalPaginationPages, 50);
 
-            $allPages = json_decode($response->getBody()->getContents(), true);
+            // Parse JSON
+            $allPages = json_decode($rawBody, true) ?? [];
 
             if ($maxPages > 1) {
                 $additionalPages = $this->fetchPagesConcurrently($baseUrl, $perPage, 2, $maxPages);
-                $allPages = array_merge($allPages, $additionalPages);
-            }
-
-            if (empty($allPages) || !is_array($allPages)) {
-                return [
-                    'has_suspicious' => false,
-                    'total_pages' => 0,
-                    'suspicious_count' => 0,
-                    'suspicious_pages' => [],
-                    'error' => 'Tidak ada pages ditemukan',
-                ];
+                if (is_array($additionalPages) && !empty($additionalPages)) {
+                    $allPages = array_merge($allPages, $additionalPages);
+                }
             }
 
             $suspiciousPages = [];
 
-            foreach ($allPages as $page) {
-                $content = strtolower($page['content']['rendered'] ?? '');
-                $title = strtolower($page['title']['rendered'] ?? '');
-                $excerpt = strtolower($page['excerpt']['rendered'] ?? '');
+            if (!empty($allPages) && is_array($allPages)) {
+                foreach ($allPages as $page) {
+                    if (!is_array($page)) continue;
+                    
+                    $content = strtolower($page['content']['rendered'] ?? '');
+                    $title = strtolower($page['title']['rendered'] ?? '');
+                    $excerpt = strtolower($page['excerpt']['rendered'] ?? '');
 
-                $fullText = $content . ' ' . $title . ' ' . $excerpt;
+                    $fullText = $content . ' ' . $title . ' ' . $excerpt;
 
-                $foundKeywords = $this->detectKeywords($fullText);
+                    $foundKeywords = $this->detectKeywords($fullText);
 
-                if ($foundKeywords['is_suspicious']) {
-                    $suspiciousPages[] = [
-                        'id' => $page['id'],
-                        'title' => $page['title']['rendered'] ?? 'No title',
-                        'link' => $page['link'] ?? '',
-                        'keywords' => $foundKeywords['keywords'],
-                        'keyword_count' => count($foundKeywords['keywords']),
-                        'date' => $page['date'] ?? '',
-                    ];
+                    if ($foundKeywords['is_suspicious']) {
+                        $suspiciousPages[] = [
+                            'id' => $page['id'] ?? 0,
+                            'title' => $page['title']['rendered'] ?? 'No title',
+                            'link' => $page['link'] ?? '',
+                            'keywords' => $foundKeywords['keywords'],
+                            'keyword_count' => count($foundKeywords['keywords']),
+                            'date' => $page['date'] ?? '',
+                        ];
+                    }
                 }
             }
 
+            // ✅ Merge detection results
+            $hasSuspicious = !empty($suspiciousPages) || $injectedHtml['has_suspicious'];
+
             return [
-                'has_suspicious' => !empty($suspiciousPages),
+                'has_suspicious' => $hasSuspicious,
                 'total_pages' => count($allPages),
                 'total_pages_available' => $totalItems,
                 'total_pagination_scanned' => $maxPages,
                 'suspicious_count' => count($suspiciousPages),
                 'suspicious_pages' => $suspiciousPages,
+                'injected_html' => $injectedHtml, // ✅ NEW
                 'error' => null,
             ];
 
@@ -331,6 +349,100 @@ class ContentScannerService
                 'error' => $e->getMessage(),
             ];
         }
+    }
+
+    /**
+     * ✅ NEW: Detect HTML injection in WP-JSON response
+     */
+    protected function detectInjectedHtml($rawBody)
+    {
+        // Find where JSON starts
+        $jsonStart = strpos($rawBody, '{');
+        $jsonArrayStart = strpos($rawBody, '[');
+        
+        // Determine actual JSON start position
+        if ($jsonStart === false && $jsonArrayStart === false) {
+            return [
+                'has_suspicious' => false,
+                'keywords' => [],
+                'html_snippet' => '',
+            ];
+        }
+        
+        if ($jsonStart === false) {
+            $jsonStart = $jsonArrayStart;
+        } elseif ($jsonArrayStart !== false && $jsonArrayStart < $jsonStart) {
+            $jsonStart = $jsonArrayStart;
+        }
+        
+        if ($jsonStart === 0) {
+            // No HTML before JSON
+            return [
+                'has_suspicious' => false,
+                'keywords' => [],
+                'html_snippet' => '',
+            ];
+        }
+
+        // Extract HTML part (before JSON)
+        $htmlPart = substr($rawBody, 0, $jsonStart);
+        
+        // Skip if too short (likely just whitespace)
+        if (strlen(trim($htmlPart)) < 10) {
+            return [
+                'has_suspicious' => false,
+                'keywords' => [],
+                'html_snippet' => '',
+            ];
+        }
+        
+        // Check for suspicious keywords
+        $foundKeywords = $this->detectKeywords(strtolower($htmlPart));
+        
+        // Check for hidden HTML patterns (common in SEO spam)
+        $injectionPatterns = [
+            'display:none',
+            'visibility:hidden',
+            'opacity:0',
+            'position:absolute',
+            'left:-9999',
+            'top:-9999',
+        ];
+        
+        $hasInjectionPattern = false;
+        foreach ($injectionPatterns as $pattern) {
+            if (stripos($htmlPart, $pattern) !== false) {
+                $hasInjectionPattern = true;
+                break;
+            }
+        }
+        
+        // Extract suspicious links
+        preg_match_all('/<a\s+[^>]*href=["\']([^"\']+)["\'][^>]*>/i', $htmlPart, $links);
+        $suspiciousLinks = [];
+        
+        if (!empty($links[1])) {
+            foreach ($links[1] as $link) {
+                $linkKeywords = $this->detectKeywords(strtolower($link));
+                if ($linkKeywords['is_suspicious']) {
+                    $suspiciousLinks[] = $link;
+                }
+            }
+        }
+        
+        $isSuspicious = $foundKeywords['is_suspicious'] || 
+                        $hasInjectionPattern || 
+                        !empty($suspiciousLinks);
+
+        return [
+            'has_suspicious' => $isSuspicious,
+            'keywords' => $foundKeywords['keywords'],
+            'injection_patterns' => $hasInjectionPattern ? ['hidden HTML detected'] : [],
+            'suspicious_links' => array_slice($suspiciousLinks, 0, 10), // Max 10 links
+            'total_links' => count($suspiciousLinks),
+            'html_snippet' => strlen($htmlPart) > 300 ? substr($htmlPart, 0, 300) . '...' : $htmlPart,
+            'html_length' => strlen($htmlPart),
+        ];
     }
 
     /**
@@ -367,7 +479,7 @@ class ContentScannerService
     }
 
     /**
-     * ✅ NEW: Fetch multiple pages concurrently
+     * Fetch multiple pages concurrently
      */
     protected function fetchPagesConcurrently($baseUrl, $perPage, $startPage, $endPage)
     {

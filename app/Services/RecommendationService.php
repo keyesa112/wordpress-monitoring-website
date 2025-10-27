@@ -61,6 +61,11 @@ class RecommendationService
                 return ($scanResults['posts']['has_suspicious'] ?? false) && 
                        ($scanResults['posts']['suspicious_count'] ?? 0) >= ($recommendation['min_count'] ?? 1);
 
+            // ✅ NEW: Pages detection
+            case 'has_suspicious_pages':
+                return ($scanResults['pages']['has_suspicious'] ?? false) && 
+                       ($scanResults['pages']['suspicious_count'] ?? 0) >= ($recommendation['min_count'] ?? 1);
+
             case 'has_suspicious_header':
                 return $scanResults['header_footer']['has_suspicious'] ?? false;
 
@@ -71,26 +76,67 @@ class RecommendationService
                 return $scanResults['sitemap']['has_suspicious'] ?? false;
 
             case 'website_offline':
-                // Check if status is offline or response time > 5000ms
                 return ($scanResults['status']['status'] ?? '') === 'offline' ||
                        ($scanResults['status']['response_time'] ?? 0) > 5000;
 
+            // ✅ NEW: Injected HTML detection
+            case 'has_injected_html':
+                $postsInjection = $scanResults['posts']['injected_html']['has_suspicious'] ?? false;
+                $pagesInjection = $scanResults['pages']['injected_html']['has_suspicious'] ?? false;
+                return $postsInjection || $pagesInjection;
+
+            // ✅ NEW: Hidden backlinks detection
+            case 'has_hidden_backlinks':
+                $postsLinks = $scanResults['posts']['injected_html']['total_links'] ?? 0;
+                $pagesLinks = $scanResults['pages']['injected_html']['total_links'] ?? 0;
+                return ($postsLinks + $pagesLinks) > 0;
+
             case 'no_suspicious_content':
-                return !($scanResults['has_suspicious_content'] ?? false);
+                // Check injected HTML too
+                $postsInjection = $scanResults['posts']['injected_html']['has_suspicious'] ?? false;
+                $pagesInjection = $scanResults['pages']['injected_html']['has_suspicious'] ?? false;
+                
+                return !($scanResults['has_suspicious_content'] ?? false) && 
+                       !$postsInjection && 
+                       !$pagesInjection;
 
             case 'multiple_areas_infected':
                 $infectedAreas = 0;
                 if ($scanResults['posts']['has_suspicious'] ?? false) $infectedAreas++;
+                if ($scanResults['pages']['has_suspicious'] ?? false) $infectedAreas++; // ✅ ADDED
                 if ($scanResults['header_footer']['has_suspicious'] ?? false) $infectedAreas++;
                 if ($scanResults['meta']['has_suspicious'] ?? false) $infectedAreas++;
                 if ($scanResults['sitemap']['has_suspicious'] ?? false) $infectedAreas++;
                 
+                // ✅ ADDED: Check injected HTML
+                if ($scanResults['posts']['injected_html']['has_suspicious'] ?? false) $infectedAreas++;
+                if ($scanResults['pages']['injected_html']['has_suspicious'] ?? false) $infectedAreas++;
+                
                 return $infectedAreas >= ($recommendation['min_areas'] ?? 3);
 
             case 'wp_json_disabled':
-                $error = $scanResults['posts']['error'] ?? '';
-                return stripos($error, 'WP-JSON') !== false || 
-                       stripos($error, 'WordPress') !== false;
+                $postsError = $scanResults['posts']['error'] ?? '';
+                $pagesError = $scanResults['pages']['error'] ?? '';
+                return stripos($postsError, 'WP-JSON') !== false || 
+                       stripos($postsError, 'WordPress') !== false ||
+                       stripos($pagesError, 'WP-JSON') !== false;
+
+            // ✅ NEW: File integrity triggers
+            case 'suspicious_file_detected':
+                return isset($scanResults['file_changes']['suspicious_count']) &&
+                       $scanResults['file_changes']['suspicious_count'] > 0;
+
+            case 'theme_plugin_modified':
+                return isset($scanResults['file_changes']['modified_count']) &&
+                       $scanResults['file_changes']['modified_count'] > 0;
+
+            case 'uploads_folder_compromised':
+                return isset($scanResults['file_changes']['uploads_php_count']) &&
+                       $scanResults['file_changes']['uploads_php_count'] > 0;
+
+            case 'core_files_modified':
+                return isset($scanResults['file_changes']['core_modified']) &&
+                       $scanResults['file_changes']['core_modified'] === true;
 
             default:
                 return false;
@@ -130,19 +176,44 @@ class RecommendationService
         switch ($category) {
             case 'posts':
                 return $scanResults['posts']['suspicious_count'] ?? 0;
+            
+            // ✅ NEW: Pages count
+            case 'pages':
+                return $scanResults['pages']['suspicious_count'] ?? 0;
+            
             case 'header_footer':
                 return $scanResults['header_footer']['keyword_count'] ?? 0;
+            
             case 'meta':
                 return $scanResults['meta']['keyword_count'] ?? 0;
+            
             case 'sitemap':
                 return count($scanResults['sitemap']['suspicious_urls'] ?? []);
+            
+            // ✅ NEW: Injected HTML links count
+            case 'wp_json_injection':
+                $postsLinks = $scanResults['posts']['injected_html']['total_links'] ?? 0;
+                $pagesLinks = $scanResults['pages']['injected_html']['total_links'] ?? 0;
+                return $postsLinks + $pagesLinks;
+            
             case 'multiple':
                 $count = 0;
                 if ($scanResults['posts']['has_suspicious'] ?? false) $count++;
+                if ($scanResults['pages']['has_suspicious'] ?? false) $count++; // ✅ ADDED
                 if ($scanResults['header_footer']['has_suspicious'] ?? false) $count++;
                 if ($scanResults['meta']['has_suspicious'] ?? false) $count++;
                 if ($scanResults['sitemap']['has_suspicious'] ?? false) $count++;
+                
+                // ✅ ADDED: Count injected HTML
+                if ($scanResults['posts']['injected_html']['has_suspicious'] ?? false) $count++;
+                if ($scanResults['pages']['injected_html']['has_suspicious'] ?? false) $count++;
+                
                 return $count;
+            
+            // ✅ NEW: File integrity counts
+            case 'file_integrity':
+                return $scanResults['file_changes']['suspicious_count'] ?? 0;
+            
             default:
                 return 0;
         }
@@ -162,5 +233,27 @@ class RecommendationService
         ];
 
         return $badges[$severity] ?? '<span class="badge badge-secondary">Unknown</span>';
+    }
+
+    /**
+     * Get icon for recommendation category
+     */
+    public function getCategoryIcon($category)
+    {
+        $icons = [
+            'posts' => 'fa-file-alt',
+            'pages' => 'fa-file',
+            'header_footer' => 'fa-code',
+            'meta' => 'fa-tags',
+            'sitemap' => 'fa-sitemap',
+            'wp_json_injection' => 'fa-bug',
+            'connection' => 'fa-link',
+            'clean' => 'fa-check-circle',
+            'multiple' => 'fa-exclamation-triangle',
+            'wp_json' => 'fa-cog',
+            'file_integrity' => 'fa-shield-alt',
+        ];
+
+        return $icons[$category] ?? 'fa-info-circle';
     }
 }
