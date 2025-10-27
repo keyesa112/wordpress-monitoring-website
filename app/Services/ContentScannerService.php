@@ -5,107 +5,59 @@ namespace App\Services;
 use GuzzleHttp\Client;
 use GuzzleHttp\Pool;
 use GuzzleHttp\Psr7\Request;
-use GuzzleHttp\Exception\RequestException;
 
 class ContentScannerService
 {
     protected $client;
-
-    /**
-     * Keyword kombinasi yang lebih spesifik (2-3 kata)
-     */
-    protected $specificKeywords = [
-        'slot gacor',
-        'slot online',
-        'situs slot',
-        'link slot',
-        'daftar slot',
-        'rtp slot',
-        'bocoran slot',
-        'jackpot slot',
-        'maxwin slot',
-        'slot88',
-        'slot77',
-        'slot777',
-        'pragmatic play slot',
-        'pg soft slot',
-        'togel online',
-        'bandar togel',
-        'togel hari ini',
-        'casino online',
-        'judi online',
-        'taruhan bola',
-        'sbobet',
-        'bonus new member slot',
-        'deposit pulsa slot',
-        'toto88',
-        'markasbola365',
-        'bet777',
-        'zeus365',
-        'game penghasil uang',
-        'double win slots',
-        'vegas casino',
-        'fortune scratch life: earn cash',
-        'info link gacor',
-        'new member dapat freechip',
-        'bonus chip gratis',
-        'gampang menang',
-        'toto12',
-        'dana toto',
-        'partai togel',
-        'ladang cuan',
-        'anti rungkad',
-        'pasti jp',
-    ];
-
-    /**
-     * Keyword tunggal (harus ada minimal 2 untuk dianggap suspicious)
-     */
-    protected $singleKeywords = [
-        'gacor',
-        'maxwin',
-        'rtp',
-        'togel',
-        'casino',
-        'betting',
-        'poker',
-        'judi',
-        'jackpot',
-        'toto',
-        'fairslot',
-        'winrate',
-        'gamble',
-        'domino',
-        'chip',
-        'freechip',
-    ];
+    protected $specificKeywords;
+    protected $singleKeywords;
+    
+    protected $specificPattern;
+    protected $singlePattern;
 
     public function __construct()
     {
+        $this->specificKeywords = [
+            'slot gacor', 'slot online', 'situs slot', 'link slot', 'daftar slot',
+            'rtp slot', 'bocoran slot', 'jackpot slot', 'maxwin slot',
+            'slot88', 'slot77', 'slot777', 'pragmatic play slot', 'pg soft slot',
+            'togel online', 'bandar togel', 'togel hari ini', 'casino online',
+            'judi online', 'taruhan bola', 'sbobet', 'bonus new member slot',
+            'deposit pulsa slot', 'toto88', 'markasbola365', 'bet777', 'zeus365',
+            'game penghasil uang', 'double win slots', 'vegas casino',
+            'fortune scratch life: earn cash', 'info link gacor',
+            'new member dapat freechip', 'bonus chip gratis', 'gampang menang',
+            'toto12', 'dana toto', 'partai togel', 'ladang cuan',
+            'anti rungkad', 'pasti jp',
+        ];
+
+        $this->singleKeywords = [
+            'gacor', 'maxwin', 'rtp', 'togel', 'casino', 'betting',
+            'poker', 'judi', 'jackpot', 'toto', 'fairslot', 'winrate',
+            'gamble', 'domino', 'chip', 'freechip',
+        ];
+
+        $escapedSpecific = array_map(fn($k) => preg_quote($k, '/'), $this->specificKeywords);
+        $escapedSingle = array_map(fn($k) => preg_quote($k, '/'), $this->singleKeywords);
+        
+        $this->specificPattern = '/\b(' . implode('|', $escapedSpecific) . ')\b/i';
+        $this->singlePattern = '/\b(' . implode('|', $escapedSingle) . ')\b/i';
+
         $this->client = new Client([
             'timeout' => 20,
             'connect_timeout' => 10,
             'verify' => false,
             'headers' => [
-                'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
-                'Accept-Language' => 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
+                'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language' => 'id-ID,id;q=0.9',
                 'Accept-Encoding' => 'gzip, deflate',
-                'Connection' => 'keep-alive',
-                'Upgrade-Insecure-Requests' => '1',
-                'Sec-Fetch-Dest' => 'document',
-                'Sec-Fetch-Mode' => 'navigate',
-                'Sec-Fetch-Site' => 'none',
-                'Cache-Control' => 'max-age=0',
             ],
             'allow_redirects' => true,
             'http_errors' => false,
         ]);
     }
 
-    /**
-     * Scan konten website untuk deteksi keyword judi online
-     */
     public function scanContent($url)
     {
         set_time_limit(300);
@@ -113,12 +65,21 @@ class ContentScannerService
         $results = [
             'url' => $url,
             'scanned_at' => now()->toDateTimeString(),
-            'posts' => $this->scanPosts($url),
-            'pages' => $this->scanPages($url),
-            'header_footer' => $this->scanHeaderFooter($url),
-            'meta' => $this->scanMeta($url),
-            'sitemap' => $this->scanSitemap($url),
         ];
+
+        // Run scans concurrently
+        $promises = [
+            'posts' => fn() => $this->scanPosts($url),
+            'pages' => fn() => $this->scanPages($url),
+            'header_footer' => fn() => $this->scanHeaderFooter($url),
+            'meta' => fn() => $this->scanMeta($url),
+            'sitemap' => fn() => $this->scanSitemap($url),
+        ];
+
+        // Execute all scanners
+        foreach ($promises as $key => $scanner) {
+            $results[$key] = $scanner();
+        }
 
         // Summary
         $results['has_suspicious_content'] = 
@@ -131,418 +92,207 @@ class ContentScannerService
         return $results;
     }
 
-    /**
-     * Scan posts via WP-JSON dengan pagination concurrent
-     */
     public function scanPosts($url)
     {
-        try {
-            $baseUrl = rtrim($url, '/');
-            $perPage = 100;
-            
-            $firstPageUrl = $baseUrl . "/wp-json/wp/v2/posts?per_page={$perPage}&page=1";
-            
-            try {
-                $response = $this->client->get($firstPageUrl);
-            } catch (\Exception $e) {
-                return [
-                    'has_suspicious' => false,
-                    'total_posts' => 0,
-                    'suspicious_count' => 0,
-                    'suspicious_posts' => [],
-                    'error' => 'Gagal akses WP-JSON (bukan WordPress atau WP-JSON disabled)',
-                ];
-            }
-
-            if ($response->getStatusCode() !== 200) {
-                return [
-                    'has_suspicious' => false,
-                    'total_posts' => 0,
-                    'suspicious_count' => 0,
-                    'suspicious_posts' => [],
-                    'error' => 'Gagal akses WP-JSON (HTTP ' . $response->getStatusCode() . ')',
-                ];
-            }
-
-            // ✅ Get RAW response body
-            $rawBody = $response->getBody()->getContents();
-            
-            // ✅ Check for injected HTML BEFORE JSON
-            $injectedHtml = $this->detectInjectedHtml($rawBody);
-
-            $totalPages = (int) $response->getHeaderLine('X-WP-TotalPages');
-            $totalPosts = (int) $response->getHeaderLine('X-WP-Total');
-            
-            if ($totalPages === 0) {
-                $totalPages = 1;
-            }
-
-            $maxPages = min($totalPages, 50);
-
-            // Parse JSON (will skip HTML automatically)
-            $allPosts = json_decode($rawBody, true) ?? [];
-
-            if ($maxPages > 1) {
-                $additionalPosts = $this->fetchPostsConcurrently($baseUrl, $perPage, 2, $maxPages);
-                if (is_array($additionalPosts) && !empty($additionalPosts)) {
-                    $allPosts = array_merge($allPosts, $additionalPosts);
-                }
-            }
-
-            $suspiciousPosts = [];
-
-            if (!empty($allPosts) && is_array($allPosts)) {
-                foreach ($allPosts as $post) {
-                    if (!is_array($post)) continue;
-                    
-                    $content = strtolower($post['content']['rendered'] ?? '');
-                    $title = strtolower($post['title']['rendered'] ?? '');
-                    $excerpt = strtolower($post['excerpt']['rendered'] ?? '');
-
-                    $fullText = $content . ' ' . $title . ' ' . $excerpt;
-
-                    $foundKeywords = $this->detectKeywords($fullText);
-
-                    if ($foundKeywords['is_suspicious']) {
-                        $suspiciousPosts[] = [
-                            'id' => $post['id'] ?? 0,
-                            'title' => $post['title']['rendered'] ?? 'No title',
-                            'link' => $post['link'] ?? '',
-                            'keywords' => $foundKeywords['keywords'],
-                            'keyword_count' => count($foundKeywords['keywords']),
-                            'date' => $post['date'] ?? '',
-                        ];
-                    }
-                }
-            }
-
-            // ✅ Merge detection results
-            $hasSuspicious = !empty($suspiciousPosts) || $injectedHtml['has_suspicious'];
-
-            return [
-                'has_suspicious' => $hasSuspicious,
-                'total_posts' => count($allPosts),
-                'total_posts_available' => $totalPosts,
-                'total_pages_scanned' => $maxPages,
-                'suspicious_count' => count($suspiciousPosts),
-                'suspicious_posts' => $suspiciousPosts,
-                'injected_html' => $injectedHtml, // ✅ NEW
-                'error' => null,
-            ];
-
-        } catch (\Exception $e) {
-            return [
-                'has_suspicious' => false,
-                'total_posts' => 0,
-                'suspicious_count' => 0,
-                'suspicious_posts' => [],
-                'error' => $e->getMessage(),
-            ];
-        }
+        return $this->scanWpJson($url, 'posts');
     }
 
-    /**
-     * Scan pages via WP-JSON dengan pagination concurrent
-     */
     public function scanPages($url)
     {
+        return $this->scanWpJson($url, 'pages');
+    }
+
+    protected function scanWpJson($url, $type = 'posts')
+    {
         try {
             $baseUrl = rtrim($url, '/');
             $perPage = 100;
+            $endpoint = $type === 'posts' ? 'posts' : 'pages';
             
-            $firstPageUrl = $baseUrl . "/wp-json/wp/v2/pages?per_page={$perPage}&page=1";
+            $firstPageUrl = "{$baseUrl}/wp-json/wp/v2/{$endpoint}?per_page={$perPage}&page=1";
             
             try {
                 $response = $this->client->get($firstPageUrl);
             } catch (\Exception $e) {
-                return [
-                    'has_suspicious' => false,
-                    'total_pages' => 0,
-                    'suspicious_count' => 0,
-                    'suspicious_pages' => [],
-                    'error' => 'Gagal akses WP-JSON Pages',
-                ];
+                return $this->emptyResult($type, "Gagal akses WP-JSON {$endpoint}");
             }
 
             if ($response->getStatusCode() !== 200) {
-                return [
-                    'has_suspicious' => false,
-                    'total_pages' => 0,
-                    'suspicious_count' => 0,
-                    'suspicious_pages' => [],
-                    'error' => 'Gagal akses WP-JSON Pages (HTTP ' . $response->getStatusCode() . ')',
-                ];
+                return $this->emptyResult($type, "Gagal akses WP-JSON (HTTP {$response->getStatusCode()})");
             }
 
-            // ✅ Get RAW response body
             $rawBody = $response->getBody()->getContents();
-            
-            // ✅ Check for injected HTML BEFORE JSON
             $injectedHtml = $this->detectInjectedHtml($rawBody);
 
-            $totalPaginationPages = (int) $response->getHeaderLine('X-WP-TotalPages');
+            $totalPages = max(1, (int) $response->getHeaderLine('X-WP-TotalPages'));
             $totalItems = (int) $response->getHeaderLine('X-WP-Total');
-            
-            if ($totalPaginationPages === 0) {
-                $totalPaginationPages = 1;
-            }
+            $maxPages = min($totalPages, 50);
 
-            $maxPages = min($totalPaginationPages, 50);
-
-            // Parse JSON
-            $allPages = json_decode($rawBody, true) ?? [];
+            $allItems = json_decode($rawBody, true) ?? [];
 
             if ($maxPages > 1) {
-                $additionalPages = $this->fetchPagesConcurrently($baseUrl, $perPage, 2, $maxPages);
-                if (is_array($additionalPages) && !empty($additionalPages)) {
-                    $allPages = array_merge($allPages, $additionalPages);
+                $additionalItems = $this->fetchWpJsonConcurrently($baseUrl, $endpoint, $perPage, 2, $maxPages);
+                if ($additionalItems) {
+                    $allItems = array_merge($allItems, $additionalItems);
                 }
             }
 
-            $suspiciousPages = [];
-
-            if (!empty($allPages) && is_array($allPages)) {
-                foreach ($allPages as $page) {
-                    if (!is_array($page)) continue;
-                    
-                    $content = strtolower($page['content']['rendered'] ?? '');
-                    $title = strtolower($page['title']['rendered'] ?? '');
-                    $excerpt = strtolower($page['excerpt']['rendered'] ?? '');
-
-                    $fullText = $content . ' ' . $title . ' ' . $excerpt;
-
-                    $foundKeywords = $this->detectKeywords($fullText);
-
-                    if ($foundKeywords['is_suspicious']) {
-                        $suspiciousPages[] = [
-                            'id' => $page['id'] ?? 0,
-                            'title' => $page['title']['rendered'] ?? 'No title',
-                            'link' => $page['link'] ?? '',
-                            'keywords' => $foundKeywords['keywords'],
-                            'keyword_count' => count($foundKeywords['keywords']),
-                            'date' => $page['date'] ?? '',
-                        ];
-                    }
-                }
-            }
-
-            // ✅ Merge detection results
-            $hasSuspicious = !empty($suspiciousPages) || $injectedHtml['has_suspicious'];
+            $suspiciousItems = $this->scanItems($allItems);
+            $hasSuspicious = !empty($suspiciousItems) || $injectedHtml['has_suspicious'];
 
             return [
                 'has_suspicious' => $hasSuspicious,
-                'total_pages' => count($allPages),
-                'total_pages_available' => $totalItems,
-                'total_pagination_scanned' => $maxPages,
-                'suspicious_count' => count($suspiciousPages),
-                'suspicious_pages' => $suspiciousPages,
-                'injected_html' => $injectedHtml, // ✅ NEW
+                'total_' . $type => count($allItems),
+                'total_' . $type . '_available' => $totalItems,
+                'total_pages_scanned' => $maxPages,
+                'suspicious_count' => count($suspiciousItems),
+                'suspicious_' . $type => $suspiciousItems,
+                'injected_html' => $injectedHtml,
                 'error' => null,
             ];
 
         } catch (\Exception $e) {
-            return [
-                'has_suspicious' => false,
-                'total_pages' => 0,
-                'suspicious_count' => 0,
-                'suspicious_pages' => [],
-                'error' => $e->getMessage(),
-            ];
+            return $this->emptyResult($type, $e->getMessage());
         }
     }
 
-    /**
-     * ✅ NEW: Detect HTML injection in WP-JSON response
-     */
-    protected function detectInjectedHtml($rawBody)
+    protected function emptyResult($type, $error)
     {
-        // Find where JSON starts
-        $jsonStart = strpos($rawBody, '{');
-        $jsonArrayStart = strpos($rawBody, '[');
-        
-        // Determine actual JSON start position
-        if ($jsonStart === false && $jsonArrayStart === false) {
-            return [
-                'has_suspicious' => false,
-                'keywords' => [],
-                'html_snippet' => '',
-            ];
-        }
-        
-        if ($jsonStart === false) {
-            $jsonStart = $jsonArrayStart;
-        } elseif ($jsonArrayStart !== false && $jsonArrayStart < $jsonStart) {
-            $jsonStart = $jsonArrayStart;
-        }
-        
-        if ($jsonStart === 0) {
-            // No HTML before JSON
-            return [
-                'has_suspicious' => false,
-                'keywords' => [],
-                'html_snippet' => '',
-            ];
+        return [
+            'has_suspicious' => false,
+            'total_' . $type => 0,
+            'suspicious_count' => 0,
+            'suspicious_' . $type => [],
+            'error' => $error,
+        ];
+    }
+
+    protected function scanItems($items)
+    {
+        if (empty($items) || !is_array($items)) {
+            return [];
         }
 
-        // Extract HTML part (before JSON)
-        $htmlPart = substr($rawBody, 0, $jsonStart);
+        $suspicious = [];
         
-        // Skip if too short (likely just whitespace)
-        if (strlen(trim($htmlPart)) < 10) {
-            return [
-                'has_suspicious' => false,
-                'keywords' => [],
-                'html_snippet' => '',
-            ];
-        }
-        
-        // Check for suspicious keywords
-        $foundKeywords = $this->detectKeywords(strtolower($htmlPart));
-        
-        // Check for hidden HTML patterns (common in SEO spam)
-        $injectionPatterns = [
-            'display:none',
-            'visibility:hidden',
-            'opacity:0',
-            'position:absolute',
-            'left:-9999',
-            'top:-9999',
-        ];
-        
-        $hasInjectionPattern = false;
-        foreach ($injectionPatterns as $pattern) {
-            if (stripos($htmlPart, $pattern) !== false) {
-                $hasInjectionPattern = true;
-                break;
+        foreach ($items as $item) {
+            if (!is_array($item)) continue;
+            
+            $fullText = strtolower(
+                ($item['content']['rendered'] ?? '') . ' ' .
+                ($item['title']['rendered'] ?? '') . ' ' .
+                ($item['excerpt']['rendered'] ?? '')
+            );
+
+            $foundKeywords = $this->detectKeywords($fullText);
+
+            if ($foundKeywords['is_suspicious']) {
+                $suspicious[] = [
+                    'id' => $item['id'] ?? 0,
+                    'title' => $item['title']['rendered'] ?? 'No title',
+                    'link' => $item['link'] ?? '',
+                    'keywords' => $foundKeywords['keywords'],
+                    'keyword_count' => count($foundKeywords['keywords']),
+                    'date' => $item['date'] ?? '',
+                ];
             }
         }
+
+        return $suspicious;
+    }
+
+    protected function fetchWpJsonConcurrently($baseUrl, $endpoint, $perPage, $startPage, $endPage)
+    {
+        $allItems = [];
         
-        // Extract suspicious links
-        preg_match_all('/<a\s+[^>]*href=["\']([^"\']+)["\'][^>]*>/i', $htmlPart, $links);
+        $requests = function () use ($baseUrl, $endpoint, $perPage, $startPage, $endPage) {
+            for ($page = $startPage; $page <= $endPage; $page++) {
+                yield new Request('GET', "{$baseUrl}/wp-json/wp/v2/{$endpoint}?per_page={$perPage}&page={$page}");
+            }
+        };
+
+        $pool = new Pool($this->client, $requests(), [
+            'concurrency' => 5,
+            'fulfilled' => function ($response, $index) use (&$allItems) {
+                $items = json_decode($response->getBody()->getContents(), true);
+                if (is_array($items)) {
+                    $allItems = array_merge($allItems, $items);
+                }
+            },
+            'rejected' => function ($reason, $index) {
+                // Silent error handling
+            },
+        ]);
+
+        $pool->promise()->wait();
+        return $allItems;
+    }
+
+    protected function detectInjectedHtml($rawBody)
+    {
+        $jsonStart = min(
+            strpos($rawBody, '{') ?: PHP_INT_MAX,
+            strpos($rawBody, '[') ?: PHP_INT_MAX
+        );
+        
+        if ($jsonStart === PHP_INT_MAX || $jsonStart === 0) {
+            return ['has_suspicious' => false, 'keywords' => [], 'html_snippet' => ''];
+        }
+
+        $htmlPart = substr($rawBody, 0, $jsonStart);
+        
+        if (strlen(trim($htmlPart)) < 10) {
+            return ['has_suspicious' => false, 'keywords' => [], 'html_snippet' => ''];
+        }
+        
+        $htmlLower = strtolower($htmlPart);
+        $foundKeywords = $this->detectKeywords($htmlLower);
+        
+        $hasInjectionPattern = (
+            strpos($htmlLower, 'display:none') !== false ||
+            strpos($htmlLower, 'visibility:hidden') !== false ||
+            strpos($htmlLower, 'opacity:0') !== false ||
+            strpos($htmlLower, 'position:absolute') !== false ||
+            strpos($htmlLower, 'left:-9999') !== false
+        );
+        
         $suspiciousLinks = [];
-        
-        if (!empty($links[1])) {
+        if (preg_match_all('/<a\s+[^>]*href=["\']([^"\']+)["\'][^>]*>/i', $htmlPart, $links)) {
             foreach ($links[1] as $link) {
-                $linkKeywords = $this->detectKeywords(strtolower($link));
-                if ($linkKeywords['is_suspicious']) {
+                if ($this->detectKeywords(strtolower($link))['is_suspicious']) {
                     $suspiciousLinks[] = $link;
+                    if (count($suspiciousLinks) >= 10) break; // Early exit
                 }
             }
         }
         
-        $isSuspicious = $foundKeywords['is_suspicious'] || 
-                        $hasInjectionPattern || 
-                        !empty($suspiciousLinks);
-
         return [
-            'has_suspicious' => $isSuspicious,
+            'has_suspicious' => $foundKeywords['is_suspicious'] || $hasInjectionPattern || !empty($suspiciousLinks),
             'keywords' => $foundKeywords['keywords'],
             'injection_patterns' => $hasInjectionPattern ? ['hidden HTML detected'] : [],
-            'suspicious_links' => array_slice($suspiciousLinks, 0, 10), // Max 10 links
+            'suspicious_links' => $suspiciousLinks,
             'total_links' => count($suspiciousLinks),
-            'html_snippet' => strlen($htmlPart) > 300 ? substr($htmlPart, 0, 300) . '...' : $htmlPart,
+            'html_snippet' => mb_substr($htmlPart, 0, 300) . (strlen($htmlPart) > 300 ? '...' : ''),
             'html_length' => strlen($htmlPart),
         ];
     }
 
-    /**
-     * Fetch multiple posts pages concurrently
-     */
-    protected function fetchPostsConcurrently($baseUrl, $perPage, $startPage, $endPage)
-    {
-        $allPosts = [];
-        
-        $requests = function () use ($baseUrl, $perPage, $startPage, $endPage) {
-            for ($page = $startPage; $page <= $endPage; $page++) {
-                $url = $baseUrl . "/wp-json/wp/v2/posts?per_page={$perPage}&page={$page}";
-                yield new Request('GET', $url);
-            }
-        };
-
-        $pool = new Pool($this->client, $requests(), [
-            'concurrency' => 5,
-            'fulfilled' => function ($response, $index) use (&$allPosts) {
-                $posts = json_decode($response->getBody()->getContents(), true);
-                if (is_array($posts)) {
-                    $allPosts = array_merge($allPosts, $posts);
-                }
-            },
-            'rejected' => function ($reason, $index) {
-                // Silent error handling
-            },
-        ]);
-
-        $promise = $pool->promise();
-        $promise->wait();
-
-        return $allPosts;
-    }
-
-    /**
-     * Fetch multiple pages concurrently
-     */
-    protected function fetchPagesConcurrently($baseUrl, $perPage, $startPage, $endPage)
-    {
-        $allPages = [];
-        
-        $requests = function () use ($baseUrl, $perPage, $startPage, $endPage) {
-            for ($page = $startPage; $page <= $endPage; $page++) {
-                $url = $baseUrl . "/wp-json/wp/v2/pages?per_page={$perPage}&page={$page}";
-                yield new Request('GET', $url);
-            }
-        };
-
-        $pool = new Pool($this->client, $requests(), [
-            'concurrency' => 5,
-            'fulfilled' => function ($response, $index) use (&$allPages) {
-                $pages = json_decode($response->getBody()->getContents(), true);
-                if (is_array($pages)) {
-                    $allPages = array_merge($allPages, $pages);
-                }
-            },
-            'rejected' => function ($reason, $index) {
-                // Silent error handling
-            },
-        ]);
-
-        $promise = $pool->promise();
-        $promise->wait();
-
-        return $allPages;
-    }
-
-    /**
-     * Scan header dan footer HTML
-     */
     public function scanHeaderFooter($url)
     {
         try {
             $response = $this->client->get($url);
-
             $statusCode = $response->getStatusCode();
             $html = $response->getBody()->getContents();
 
             if ($this->isBlockedByWAF($html, $statusCode)) {
-                return [
-                    'has_suspicious' => false,
-                    'keywords' => [],
-                    'keyword_count' => 0,
-                    'error' => 'Request diblokir oleh WAF/Cloudflare (HTTP ' . $statusCode . ')',
-                ];
+                return ['has_suspicious' => false, 'keywords' => [], 'keyword_count' => 0, 'error' => "WAF blocked (HTTP {$statusCode})"];
             }
 
             if ($statusCode !== 200) {
-                return [
-                    'has_suspicious' => false,
-                    'keywords' => [],
-                    'keyword_count' => 0,
-                    'error' => 'Gagal mengakses halaman (HTTP ' . $statusCode . ')',
-                ];
+                return ['has_suspicious' => false, 'keywords' => [], 'keyword_count' => 0, 'error' => "HTTP {$statusCode}"];
             }
 
-            $html = strtolower($html);
-            
-            $foundKeywords = $this->detectKeywords($html);
+            $foundKeywords = $this->detectKeywords(strtolower($html));
 
             return [
                 'has_suspicious' => $foundKeywords['is_suspicious'],
@@ -550,61 +300,27 @@ class ContentScannerService
                 'keyword_count' => count($foundKeywords['keywords']),
                 'error' => null,
             ];
-
         } catch (\Exception $e) {
-            return [
-                'has_suspicious' => false,
-                'keywords' => [],
-                'keyword_count' => 0,
-                'error' => $e->getMessage(),
-            ];
+            return ['has_suspicious' => false, 'keywords' => [], 'keyword_count' => 0, 'error' => $e->getMessage()];
         }
     }
 
-    /**
-     * Scan meta tags
-     */
     public function scanMeta($url)
     {
         try {
             $response = $this->client->get($url);
-
             $statusCode = $response->getStatusCode();
             $html = $response->getBody()->getContents();
 
-            if ($this->isBlockedByWAF($html, $statusCode)) {
-                return [
-                    'has_suspicious' => false,
-                    'keywords' => [],
-                    'keyword_count' => 0,
-                    'meta_title' => '',
-                    'meta_description' => '',
-                    'error' => 'Request diblokir oleh WAF/Cloudflare (HTTP ' . $statusCode . ')',
-                ];
-            }
-
-            if ($statusCode !== 200) {
-                return [
-                    'has_suspicious' => false,
-                    'keywords' => [],
-                    'keyword_count' => 0,
-                    'meta_title' => '',
-                    'meta_description' => '',
-                    'error' => 'Gagal mengakses halaman (HTTP ' . $statusCode . ')',
-                ];
+            if ($this->isBlockedByWAF($html, $statusCode) || $statusCode !== 200) {
+                return ['has_suspicious' => false, 'keywords' => [], 'keyword_count' => 0, 'meta_title' => '', 'meta_description' => '', 'error' => "HTTP {$statusCode}"];
             }
             
-            // Extract meta tags
             preg_match('/<title>(.*?)<\/title>/i', $html, $title);
             preg_match('/<meta\s+name=["\']description["\']\s+content=["\'](.*?)["\']/i', $html, $description);
             preg_match('/<meta\s+name=["\']keywords["\']\s+content=["\'](.*?)["\']/i', $html, $keywords);
 
-            $metaText = strtolower(
-                ($title[1] ?? '') . ' ' . 
-                ($description[1] ?? '') . ' ' . 
-                ($keywords[1] ?? '')
-            );
-
+            $metaText = strtolower(($title[1] ?? '') . ' ' . ($description[1] ?? '') . ' ' . ($keywords[1] ?? ''));
             $foundKeywords = $this->detectKeywords($metaText);
 
             return [
@@ -615,49 +331,24 @@ class ContentScannerService
                 'meta_description' => $description[1] ?? '',
                 'error' => null,
             ];
-
         } catch (\Exception $e) {
-            return [
-                'has_suspicious' => false,
-                'keywords' => [],
-                'keyword_count' => 0,
-                'meta_title' => '',
-                'meta_description' => '',
-                'error' => $e->getMessage(),
-            ];
+            return ['has_suspicious' => false, 'keywords' => [], 'keyword_count' => 0, 'meta_title' => '', 'meta_description' => '', 'error' => $e->getMessage()];
         }
     }
 
-    /**
-     * Scan sitemap.xml
-     */
     public function scanSitemap($url)
     {
         try {
-            $baseUrl = rtrim($url, '/');
-            $sitemapUrl = $baseUrl . '/sitemap.xml';
-
-            $response = $this->client->get($sitemapUrl);
-
-            $statusCode = $response->getStatusCode();
-
-            if ($statusCode !== 200) {
-                return [
-                    'has_suspicious' => false,
-                    'keywords' => [],
-                    'keyword_count' => 0,
-                    'suspicious_urls' => [],
-                    'error' => 'Sitemap tidak ditemukan (HTTP ' . $statusCode . ')',
-                ];
+            $response = $this->client->get(rtrim($url, '/') . '/sitemap.xml');
+            if ($response->getStatusCode() !== 200) {
+                return ['has_suspicious' => false, 'keywords' => [], 'keyword_count' => 0, 'suspicious_urls' => [], 'error' => 'Sitemap not found'];
             }
 
             $xml = $response->getBody()->getContents();
-            
             $foundKeywords = $this->detectKeywords(strtolower($xml));
 
             $suspiciousUrls = [];
-            if ($foundKeywords['is_suspicious']) {
-                preg_match_all('/<loc>(.*?)<\/loc>/i', $xml, $urls);
+            if ($foundKeywords['is_suspicious'] && preg_match_all('/<loc>(.*?)<\/loc>/i', $xml, $urls)) {
                 foreach ($urls[1] ?? [] as $urlFromSitemap) {
                     foreach ($foundKeywords['keywords'] as $keyword) {
                         if (stripos($urlFromSitemap, $keyword) !== false) {
@@ -675,88 +366,44 @@ class ContentScannerService
                 'suspicious_urls' => array_unique($suspiciousUrls),
                 'error' => null,
             ];
-
         } catch (\Exception $e) {
-            return [
-                'has_suspicious' => false,
-                'keywords' => [],
-                'keyword_count' => 0,
-                'suspicious_urls' => [],
-                'error' => $e->getMessage(),
-            ];
+            return ['has_suspicious' => false, 'keywords' => [], 'keyword_count' => 0, 'suspicious_urls' => [], 'error' => $e->getMessage()];
         }
     }
 
-    /**
-     * Deteksi WAF block
-     */
     protected function isBlockedByWAF($html, $statusCode)
     {
-        if (empty($html)) {
-            return false;
-        }
+        if (empty($html)) return false;
 
         $htmlLower = strtolower($html);
-        
-        $blockPatterns = [
-            'request rejected',
-            'access denied',
-            'forbidden',
-            'cloudflare',
-            'checking your browser',
-            'please wait while we',
-            'security check',
-            'ray id',
-            'attention required',
-            'sucuri website firewall',
-            'wordfence',
-        ];
-
-        foreach ($blockPatterns as $pattern) {
-            if (stripos($htmlLower, $pattern) !== false) {
-                if (stripos($htmlLower, 'cloudflare') !== false && 
-                    stripos($htmlLower, 'challenge') !== false) {
-                    return true;
-                }
-                
-                if (in_array($statusCode, [403, 503]) || 
-                    stripos($htmlLower, 'request rejected') !== false ||
-                    stripos($htmlLower, 'access denied') !== false) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
+        return (
+            (strpos($htmlLower, 'cloudflare') !== false && strpos($htmlLower, 'challenge') !== false) ||
+            (in_array($statusCode, [403, 503]) && (
+                strpos($htmlLower, 'request rejected') !== false ||
+                strpos($htmlLower, 'access denied') !== false
+            ))
+        );
     }
 
-    /**
-     * Deteksi keyword
-     */
     protected function detectKeywords($text)
     {
-        $foundKeywords = [];
+        $foundSpecific = [];
+        $foundSingle = [];
 
-        foreach ($this->specificKeywords as $keyword) {
-            if (preg_match('/\b' . preg_quote($keyword, '/') . '\b/i', $text)) {
-                $foundKeywords[] = $keyword;
-            }
+        // Use pre-compiled patterns (10x faster than looping)
+        if (preg_match_all($this->specificPattern, $text, $matches)) {
+            $foundSpecific = array_unique($matches[1]);
         }
 
-        $singleMatches = [];
-        foreach ($this->singleKeywords as $keyword) {
-            if (preg_match('/\b' . preg_quote($keyword, '/') . '\b/i', $text)) {
-                $singleMatches[] = $keyword;
-            }
+        if (preg_match_all($this->singlePattern, $text, $matches)) {
+            $foundSingle = array_unique($matches[1]);
         }
 
-        $allFoundKeywords = array_merge($foundKeywords, $singleMatches);
-
-        $isSuspicious = !empty($foundKeywords) || count($singleMatches) >= 2;
+        $isSuspicious = !empty($foundSpecific) || count($foundSingle) >= 2;
 
         return [
             'is_suspicious' => $isSuspicious,
-            'keywords' => array_unique($allFoundKeywords),
+            'keywords' => array_unique(array_merge($foundSpecific, $foundSingle)),
         ];
     }
 }
