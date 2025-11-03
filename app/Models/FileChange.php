@@ -2,50 +2,33 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class FileChange extends Model
 {
+    use HasFactory;
+
     protected $fillable = [
         'website_id',
         'file_path',
-        'change_type',
+        'change_type',          // added, modified, deleted
+        'is_suspicious',
         'old_hash',
         'new_hash',
-        'is_suspicious',
-        'suspicious_patterns',
-        'file_preview',
-        'severity',
-        'recommendation',
+        'file_size',
+        'last_modified',
     ];
 
     protected $casts = [
-        'suspicious_patterns' => 'array',
         'is_suspicious' => 'boolean',
+        'last_modified' => 'datetime',
     ];
 
-    public function website()
+    // ✅ Relationship
+    public function website(): BelongsTo
     {
         return $this->belongsTo(Website::class);
-    }
-
-    public function getSeverityBadgeAttribute()
-    {
-        $badges = [
-            'critical' => '<span class="badge badge-danger">Critical</span>',
-            'warning' => '<span class="badge badge-warning">Warning</span>',
-            'info' => '<span class="badge badge-info">Info</span>',
-        ];
-        return $badges[$this->severity] ?? '<span class="badge badge-secondary">Unknown</span>';
-    }
-
-    public function getChangeTypeBadgeAttribute()
-    {
-        $badges = [
-            'new' => '<span class="badge badge-success">New</span>',
-            'modified' => '<span class="badge badge-warning">Modified</span>',
-            'deleted' => '<span class="badge badge-danger">Deleted</span>',
-        ];
-        return $badges[$this->change_type] ?? '<span class="badge badge-secondary">Unknown</span>';
     }
 }

@@ -63,6 +63,7 @@ class WebsiteController extends Controller
         ]);
 
         $website = Website::create([
+            'user_id' => auth()->id(),
             'name' => $request->name,
             'url' => $request->url,
             'server_path' => $request->server_path,
@@ -80,9 +81,15 @@ class WebsiteController extends Controller
 
     /**
      * Display the specified website
+     * ✅ SECURITY CHECK
      */
     public function show(Website $website)
     {
+        // ✅ Verify ownership
+        if ($website->user_id !== auth()->id()) {
+            abort(403, 'Unauthorized');
+        }
+
         $website->load(['monitoringLogs' => function($query) {
             $query->orderBy('created_at', 'desc')->limit(20);
         }]);
@@ -98,17 +105,29 @@ class WebsiteController extends Controller
 
     /**
      * Show the form for editing the specified website
+     * ✅ SECURITY CHECK
      */
     public function edit(Website $website)
     {
+        // ✅ Verify ownership
+        if ($website->user_id !== auth()->id()) {
+            abort(403, 'Unauthorized');
+        }
+
         return view('websites.edit', compact('website'));
     }
 
     /**
      * Update the specified website
+     * ✅ SECURITY CHECK
      */
     public function update(Request $request, Website $website)
     {
+        // ✅ Verify ownership
+        if ($website->user_id !== auth()->id()) {
+            abort(403, 'Unauthorized');
+        }
+
         $request->validate([
             'name' => 'required|string|max:255',
             'url' => 'required|url|unique:websites,url,' . $website->id,
@@ -125,9 +144,15 @@ class WebsiteController extends Controller
 
     /**
      * Remove the specified website
+     * ✅ SECURITY CHECK
      */
     public function destroy(Website $website)
     {
+        // ✅ Verify ownership
+        if ($website->user_id !== auth()->id()) {
+            abort(403, 'Unauthorized');
+        }
+
         $website->delete();
 
         return redirect()->route('websites.index')
@@ -136,9 +161,15 @@ class WebsiteController extends Controller
 
     /**
      * Manual check website (full check)
+     * ✅ SECURITY CHECK
      */
     public function check(Website $website)
     {
+        // ✅ Verify ownership
+        if ($website->user_id !== auth()->id()) {
+            abort(403, 'Unauthorized');
+        }
+
         set_time_limit(300);
         
         $this->performFullCheck($website);
@@ -152,6 +183,11 @@ class WebsiteController extends Controller
      */
     public function checkStatus(Website $website)
     {
+        // ✅ Verify ownership
+        if ($website->user_id !== auth()->id()) {
+            abort(403, 'Unauthorized');
+        }
+
         $this->performStatusCheck($website);
 
         return redirect()->back()
@@ -163,6 +199,11 @@ class WebsiteController extends Controller
      */
     public function scanContent(Website $website)
     {
+        // ✅ Verify ownership
+        if ($website->user_id !== auth()->id()) {
+            abort(403, 'Unauthorized');
+        }
+
         set_time_limit(300);
         
         $this->performContentScan($website);
@@ -173,9 +214,15 @@ class WebsiteController extends Controller
 
     /**
      * Create baseline for file monitoring
+     * ✅ SECURITY CHECK
      */
     public function createFileBaseline(Website $website)
     {
+        // ✅ Verify ownership
+        if ($website->user_id !== auth()->id()) {
+            abort(403, 'Unauthorized');
+        }
+
         if (empty($website->server_path)) {
             return redirect()->back()->with('error', 'Server path belum dikonfigurasi untuk website ini.');
         }
@@ -196,9 +243,15 @@ class WebsiteController extends Controller
 
     /**
      * Scan files and compare with baseline
+     * ✅ SECURITY CHECK
      */
     public function scanFiles(Website $website)
     {
+        // ✅ Verify ownership
+        if ($website->user_id !== auth()->id()) {
+            abort(403, 'Unauthorized');
+        }
+
         if (empty($website->server_path)) {
             return redirect()->back()->with('error', 'Server path belum dikonfigurasi untuk website ini.');
         }
@@ -225,9 +278,15 @@ class WebsiteController extends Controller
 
     /**
      * Show file changes
+     * ✅ SECURITY CHECK
      */
     public function fileChanges(Website $website)
     {
+        // ✅ Verify ownership
+        if ($website->user_id !== auth()->id()) {
+            abort(403, 'Unauthorized');
+        }
+
         $changes = FileChange::where('website_id', $website->id)
             ->orderBy('created_at', 'desc')
             ->paginate(50);
@@ -283,7 +342,6 @@ class WebsiteController extends Controller
                     'total_posts' => $contentResult['posts']['total_posts'] ?? 0,
                     'suspicious_count' => $contentResult['posts']['suspicious_count'] ?? 0,
                     'suspicious_posts' => array_slice($contentResult['posts']['suspicious_posts'] ?? [], 0, 20),
-                    // ✅ NEW: Include injected HTML data
                     'injected_html' => $contentResult['posts']['injected_html'] ?? null,
                     'error' => $contentResult['posts']['error'] ?? null,
                 ],
@@ -292,7 +350,6 @@ class WebsiteController extends Controller
                     'total_pages' => $contentResult['pages']['total_pages'] ?? 0,
                     'suspicious_count' => $contentResult['pages']['suspicious_count'] ?? 0,
                     'suspicious_pages' => array_slice($contentResult['pages']['suspicious_pages'] ?? [], 0, 20),
-                    // ✅ NEW: Include injected HTML data
                     'injected_html' => $contentResult['pages']['injected_html'] ?? null,
                     'error' => $contentResult['pages']['error'] ?? null,
                 ],
@@ -334,6 +391,7 @@ class WebsiteController extends Controller
 
         MonitoringLog::create([
             'website_id' => $website->id,
+            'user_id' => auth()->id(),
             'check_type' => 'full',
             'status' => $statusResult['status'],
             'response_time' => $statusResult['response_time'],
@@ -362,6 +420,7 @@ class WebsiteController extends Controller
 
         MonitoringLog::create([
             'website_id' => $website->id,
+            'user_id' => auth()->id(),
             'check_type' => 'status',
             'status' => $statusResult['status'],
             'response_time' => $statusResult['response_time'],
@@ -406,14 +465,12 @@ class WebsiteController extends Controller
                     'has_suspicious' => $contentResult['posts']['has_suspicious'] ?? false,
                     'suspicious_count' => $contentResult['posts']['suspicious_count'] ?? 0,
                     'suspicious_posts' => array_slice($contentResult['posts']['suspicious_posts'] ?? [], 0, 20),
-                    // ✅ NEW: Include injected HTML data
                     'injected_html' => $contentResult['posts']['injected_html'] ?? null,
                 ],
                 'pages' => [
                     'has_suspicious' => $contentResult['pages']['has_suspicious'] ?? false,
                     'suspicious_count' => $contentResult['pages']['suspicious_count'] ?? 0,
                     'suspicious_pages' => array_slice($contentResult['pages']['suspicious_pages'] ?? [], 0, 20),
-                    // ✅ NEW: Include injected HTML data
                     'injected_html' => $contentResult['pages']['injected_html'] ?? null,
                 ],
                 'header_footer' => [
@@ -444,6 +501,7 @@ class WebsiteController extends Controller
 
         MonitoringLog::create([
             'website_id' => $website->id,
+            'user_id' => auth()->id(),
             'check_type' => 'content',
             'status' => $website->status ?? 'unknown',
             'response_time' => 0,

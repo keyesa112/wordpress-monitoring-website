@@ -12,6 +12,7 @@ class MonitoringLog extends Model
     protected $fillable = [
         'website_id',
         'check_type',
+        'user_id',
         'status',
         'response_time',
         'http_code',

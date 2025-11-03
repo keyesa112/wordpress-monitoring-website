@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('websites', function (Blueprint $table) {
             $table->id();
             $table->string('name'); // Nama website / klien
-            $table->string('url')->unique(); // URL website
+            $table->string('url');
             $table->enum('status', ['online', 'offline', 'checking', 'error'])->default('checking');
             $table->integer('response_time')->nullable(); // dalam ms
             $table->integer('http_code')->nullable(); // HTTP status code

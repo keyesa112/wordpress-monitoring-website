@@ -10,6 +10,7 @@ class Website extends Model
     use HasFactory;
 
     protected $fillable = [
+        'user_id',
         'name',
         'url',
         'server_path', 
@@ -44,6 +45,11 @@ class Website extends Model
     public function latestLog()
     {
         return $this->hasOne(MonitoringLog::class)->latestOfMany();
+    }
+
+     public function fileChanges()
+    {
+        return $this->hasMany(FileChange::class);
     }
 
     /**

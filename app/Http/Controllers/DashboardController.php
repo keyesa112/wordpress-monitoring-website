@@ -10,29 +10,36 @@ class DashboardController extends Controller
 {
     public function index()
     {
-        // Total statistics
-        $totalWebsites = Website::count();
-        $onlineWebsites = Website::where('status', 'online')->count();
-        $offlineWebsites = Website::where('status', 'offline')->count();
-        $suspiciousWebsites = Website::where('has_suspicious_content', true)->count();
+        $userId = auth()->id();
         
-        // Recent websites
-        $recentWebsites = Website::with('latestLog')
-            ->orderBy('created_at', 'desc')
-            ->limit(10)
-            ->get();
+        $totalWebsites = Website::where('user_id', $userId)->count();
+        $onlineWebsites = Website::where('user_id', $userId)
+                                 ->where('status', 'online')
+                                 ->count();
+        $offlineWebsites = Website::where('user_id', $userId)
+                                  ->where('status', 'offline')
+                                  ->count();
+        $suspiciousWebsites = Website::where('user_id', $userId)
+                                     ->where('has_suspicious_content', true)
+                                     ->count();
         
-        // Websites with suspicious content
-        $suspiciousDetails = Website::where('has_suspicious_content', true)
-            ->orderBy('suspicious_posts_count', 'desc')
-            ->limit(5)
-            ->get();
+        $recentWebsites = Website::where('user_id', $userId)
+                                 ->with('latestLog')
+                                 ->orderBy('created_at', 'desc')
+                                 ->limit(10)
+                                 ->get();
+   
+        $suspiciousDetails = Website::where('user_id', $userId)
+                                    ->where('has_suspicious_content', true)
+                                    ->orderBy('suspicious_posts_count', 'desc')
+                                    ->limit(5)
+                                    ->get();
         
-        // Recent logs
-        $recentLogs = MonitoringLog::with('website')
-            ->orderBy('created_at', 'desc')
-            ->limit(10)
-            ->get();
+        $recentLogs = MonitoringLog::where('user_id', $userId)
+                                   ->with('website')
+                                   ->orderBy('created_at', 'desc')
+                                   ->limit(10)
+                                   ->get();
 
         return view('dashboard', compact(
             'totalWebsites',
