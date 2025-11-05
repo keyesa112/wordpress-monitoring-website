@@ -45,11 +45,16 @@
                     </small>
                 </div>
 
-                {{-- NEW: Server Path Field untuk File Monitoring --}}
+                {{-- Server Path Field untuk File Monitoring --}}
                 <div class="form-group">
                     <label for="server_path">
                         <i class="fas fa-folder"></i> Server Path (File Monitoring)
-                        <span class="badge badge-info badge-sm ml-1">Opsional</span>
+                        <span class="badge badge-info badge-sm ml-1">
+                            <i class="fas fa-tag"></i> Opsional
+                        </span>
+                        <span class="badge badge-warning badge-sm ml-1">
+                            <i class="fas fa-flask"></i> Development
+                        </span>
                     </label>
                     <input type="text" 
                            class="form-control @error('server_path') is-invalid @enderror" 
@@ -80,12 +85,24 @@
                     @enderror
                 </div>
 
-                <div class="alert alert-info">
-                    <h5><i class="icon fas fa-info-circle"></i> Informasi</h5>
+                {{-- Info Alert dengan Development Notice --}}
+                <div class="alert alert-info alert-dismissible fade show" role="alert">
+                    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                    <h5>
+                        <i class="icon fas fa-info-circle"></i> Informasi
+                    </h5>
                     <ul class="mb-0 pl-3">
                         <li>Website akan <strong>otomatis dicek</strong> statusnya setelah ditambahkan.</li>
                         <li>Jika Server Path diisi, Anda dapat menggunakan <strong>File Monitoring</strong> untuk mendeteksi perubahan file mencurigakan.</li>
                         <li>Server Path dapat ditambahkan/diubah nanti melalui menu Edit.</li>
+                        <li class="mt-2">
+                            <strong>
+                                <i class="fas fa-flask"></i> File Monitoring (Development):
+                            </strong>
+                            Fitur ini masih dalam tahap pengembangan dan saat ini hanya dapat memonitor file di server lokal.
+                        </li>
                     </ul>
                 </div>
             </div>
@@ -102,10 +119,54 @@
 @stop
 
 @section('css')
-<style>
-    .badge-sm {
-        font-size: 0.75rem;
-        padding: 0.2rem 0.4rem;
-    }
-</style>
+    <style>
+        .badge-sm {
+            font-size: 0.75rem;
+            padding: 0.3rem 0.5rem;
+            display: inline-block;
+            margin-right: 0.25rem;
+        }
+
+        .badge-info {
+            background-color: #17a2b8;
+            color: white;
+        }
+
+        .badge-warning {
+            background-color: #ffc107;
+            color: #000;
+        }
+
+        .badge-warning i {
+            margin-right: 0.25rem;
+        }
+
+        .badge-info i {
+            margin-right: 0.25rem;
+        }
+
+        /* Label styling untuk better readability */
+        label {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        /* Alert improvement */
+        .alert h5 {
+            margin-bottom: 0.75rem;
+            font-weight: 600;
+        }
+
+        .alert ul li {
+            margin-bottom: 0.4rem;
+        }
+
+        .alert ul li strong {
+            color: #0c5460;
+        }
+    </style>
 @stop

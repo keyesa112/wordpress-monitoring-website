@@ -9,6 +9,7 @@ use App\Services\WebsiteCheckService;
 use App\Services\ContentScannerService;
 use App\Services\RecommendationService;
 use App\Services\FileMonitorService;
+use App\Jobs\ScanSingleWebsiteJob;
 use Illuminate\Http\Request;
 
 class WebsiteController extends Controller
@@ -515,5 +516,150 @@ class WebsiteController extends Controller
             'error_message' => $contentResult['posts']['error'] ?? null,
             'raw_result' => $compressedResult,
         ]);
+    }
+
+    // public function scanAll()
+    // {
+    //     set_time_limit(300); // Set timeout
+        
+    //     $websites = Website::where('user_id', auth()->id())->get();
+        
+    //     foreach ($websites as $website) {
+    //         try {
+    //             $website->update(['status' => 'checking']);
+                
+    //             // === SAMA PERSIS SEPERTI performFullCheck ===
+                
+    //             // 1. Run checks
+    //             $statusResult = $this->checkService->checkStatus($website->url);
+    //             $contentResult = $this->scannerService->scanContent($website->url);
+                
+    //             // 2. Build full scan result
+    //             $fullScanResult = [
+    //                 'status' => $statusResult,
+    //                 'posts' => $contentResult['posts'],
+    //                 'pages' => $contentResult['pages'],
+    //                 'header_footer' => $contentResult['header_footer'],
+    //                 'meta' => $contentResult['meta'],
+    //                 'sitemap' => $contentResult['sitemap'],
+    //                 'has_suspicious_content' => $contentResult['has_suspicious_content'],
+    //             ];
+                
+    //             // 3. Generate recommendations
+    //             $recommendations = $this->recommendationService->generateRecommendations($fullScanResult);
+                
+    //             // 4. Calculate SEMUA suspicious (tidak hanya posts + pages!)
+    //             $totalSuspicious = 
+    //                 ($contentResult['posts']['suspicious_count'] ?? 0) +
+    //                 ($contentResult['pages']['suspicious_count'] ?? 0) +
+    //                 ($contentResult['header_footer']['keyword_count'] ?? 0) +
+    //                 ($contentResult['meta']['keyword_count'] ?? 0) +
+    //                 ($contentResult['sitemap']['keyword_count'] ?? 0);
+                
+    //             // 5. Build compressed result LENGKAP
+    //             $compressedResult = [
+    //                 'status' => [
+    //                     'status' => $statusResult['status'],
+    //                     'http_code' => $statusResult['http_code'],
+    //                     'response_time' => $statusResult['response_time'],
+    //                     'error' => $statusResult['error'] ?? null,
+    //                 ],
+    //                 'content' => [
+    //                     'url' => $contentResult['url'],
+    //                     'scanned_at' => $contentResult['scanned_at'],
+    //                     'posts' => [
+    //                         'has_suspicious' => $contentResult['posts']['has_suspicious'] ?? false,
+    //                         'total_posts' => $contentResult['posts']['total_posts'] ?? 0,
+    //                         'suspicious_count' => $contentResult['posts']['suspicious_count'] ?? 0,
+    //                         'suspicious_posts' => array_slice($contentResult['posts']['suspicious_posts'] ?? [], 0, 20),
+    //                         'injected_html' => $contentResult['posts']['injected_html'] ?? null,
+    //                         'error' => $contentResult['posts']['error'] ?? null,
+    //                     ],
+    //                     'pages' => [
+    //                         'has_suspicious' => $contentResult['pages']['has_suspicious'] ?? false,
+    //                         'total_pages' => $contentResult['pages']['total_pages'] ?? 0,
+    //                         'suspicious_count' => $contentResult['pages']['suspicious_count'] ?? 0,
+    //                         'suspicious_pages' => array_slice($contentResult['pages']['suspicious_pages'] ?? [], 0, 20),
+    //                         'injected_html' => $contentResult['pages']['injected_html'] ?? null,
+    //                         'error' => $contentResult['pages']['error'] ?? null,
+    //                     ],
+    //                     'header_footer' => [
+    //                         'has_suspicious' => $contentResult['header_footer']['has_suspicious'] ?? false,
+    //                         'keyword_count' => $contentResult['header_footer']['keyword_count'] ?? 0,
+    //                         'keywords' => $contentResult['header_footer']['keywords'] ?? [],
+    //                         'error' => $contentResult['header_footer']['error'] ?? null,
+    //                     ],
+    //                     'meta' => [
+    //                         'has_suspicious' => $contentResult['meta']['has_suspicious'] ?? false,
+    //                         'keyword_count' => $contentResult['meta']['keyword_count'] ?? 0,
+    //                         'keywords' => $contentResult['meta']['keywords'] ?? [],
+    //                         'meta_title' => $contentResult['meta']['meta_title'] ?? '',
+    //                         'meta_description' => $contentResult['meta']['meta_description'] ?? '',
+    //                         'error' => $contentResult['meta']['error'] ?? null,
+    //                     ],
+    //                     'sitemap' => [
+    //                         'has_suspicious' => $contentResult['sitemap']['has_suspicious'] ?? false,
+    //                         'keyword_count' => $contentResult['sitemap']['keyword_count'] ?? 0,
+    //                         'keywords' => $contentResult['sitemap']['keywords'] ?? [],
+    //                         'suspicious_urls' => array_slice($contentResult['sitemap']['suspicious_urls'] ?? [], 0, 10),
+    //                         'error' => $contentResult['sitemap']['error'] ?? null,
+    //                     ],
+    //                     'has_suspicious_content' => $contentResult['has_suspicious_content'],
+    //                 ],
+    //                 'recommendations' => $recommendations,
+    //             ];
+                
+    //             // 6. Update website
+    //             $website->update([
+    //                 'status' => $statusResult['status'],
+    //                 'response_time' => $statusResult['response_time'],
+    //                 'http_code' => $statusResult['http_code'],
+    //                 'has_suspicious_content' => $contentResult['has_suspicious_content'],
+    //                 'suspicious_posts_count' => $totalSuspicious,
+    //                 'last_check_result' => json_encode($compressedResult),
+    //                 'last_checked_at' => now(),
+    //             ]);
+                
+    //             // 7. Log to monitoring
+    //             MonitoringLog::create([
+    //                 'website_id' => $website->id,
+    //                 'user_id' => auth()->id(),
+    //                 'check_type' => 'full',
+    //                 'status' => $statusResult['status'],
+    //                 'response_time' => $statusResult['response_time'],
+    //                 'http_code' => $statusResult['http_code'],
+    //                 'has_suspicious_content' => $contentResult['has_suspicious_content'],
+    //                 'suspicious_posts_count' => $totalSuspicious,
+    //                 'suspicious_posts' => array_merge(
+    //                     array_slice($contentResult['posts']['suspicious_posts'] ?? [], 0, 10),
+    //                     array_slice($contentResult['pages']['suspicious_pages'] ?? [], 0, 10)
+    //                 ),
+    //                 'error_message' => $statusResult['error'] ?? $contentResult['posts']['error'] ?? null,
+    //                 'raw_result' => $compressedResult,
+    //             ]);
+                
+    //         } catch (\Exception $e) {
+    //             \Log::error('Scan error for ' . $website->url . ': ' . $e->getMessage());
+    //             $website->update(['status' => 'error']);
+    //         }
+    //     }
+        
+    //     return redirect()->back()->with('success', 'Scan semua website selesai!');
+    // }
+
+    public function scanAll()
+    {
+        $websites = Website::where('user_id', auth()->id())->get();
+        
+        foreach ($websites as $website) {
+            $website->update(['status' => 'checking']);
+            ScanSingleWebsiteJob::dispatch($website->id, auth()->id());
+        }
+        
+        // Tambah session flag
+        session(['scanning' => true]);
+        
+        return redirect()->back()
+            ->with('success', 'Scan dimulai untuk ' . $websites->count() . ' website!');
     }
 }

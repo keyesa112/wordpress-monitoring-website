@@ -46,6 +46,14 @@ Route::middleware('auth')->group(function () {
         ->name('websites.file-scan');
     Route::get('websites/{website}/file-changes', [WebsiteController::class, 'fileChanges'])
         ->name('websites.file-changes');
+    Route::post('/websites/scan-all', [WebsiteController::class, 'scanAll'])
+        ->middleware('auth')
+        ->name('websites.scanAll');
+    Route::post('/clear-scanning', function() {
+        session()->forget('scanning');
+        return response()->json(['success' => true]);
+    })->name('clear.scanning')->middleware('auth');
+
     
     // Profile
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');

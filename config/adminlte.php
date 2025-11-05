@@ -325,26 +325,6 @@ return [
             ],
         ],
         
-        ['header' => 'TESTING (Development)'],
-        
-        // Test Tools
-        [
-            'text' => 'Test Backend',
-            'icon' => 'fas fa-vial',
-            'submenu' => [
-                [
-                    'text' => 'Test Ping',
-                    'url'  => 'test/ping?url=https://google.com',
-                    'icon' => 'fas fa-heartbeat',
-                ],
-                [
-                    'text' => 'Test Backlinks',
-                    'url'  => 'test/backlinks',
-                    'icon' => 'fas fa-link',
-                ],
-            ],
-        ],
-        
         ['header' => 'AKUN'],
         
         // Profile
