@@ -302,45 +302,59 @@ return [
         [
             'text' => 'Dashboard',
             'route'  => 'dashboard',
-            'icon' => 'fas fa-tachometer-alt',
+            'icon' => 'fas fa-fw fa-tachometer-alt',
+            'icon_color' => 'cyan',
         ],
         
-        ['header' => 'MONITORING'],
+        ['header' => 'WEBSITE MONITORING'],
         
-        // Website Manager
+        // Daftar Website
         [
-            'text' => 'Kelola Website',
-            'icon' => 'fas fa-globe',
+            'text' => 'Daftar Website',
+            'route'  => 'websites.index',
+            'icon' => 'fas fa-fw fa-globe',
+            'icon_color' => 'primary',
+        ],
+        
+        // Tambah Website
+        [
+            'text' => 'Tambah Website',
+            'icon' => 'fas fa-fw fa-plus-circle',
+            'icon_color' => 'success',
             'submenu' => [
                 [
-                    'text' => 'Daftar Website',
-                    'route'  => 'websites.index',
-                    'icon' => 'fas fa-list',
+                    'text' => 'Tambah Manual',
+                    'route'  => 'websites.create',
+                    'icon' => 'fas fa-fw fa-keyboard',
                 ],
                 [
-                    'text' => 'Tambah Website',
-                    'route'  => 'websites.create',
-                    'icon' => 'fas fa-plus-circle',
+                    'text' => 'Import CSV',
+                    'route'  => 'websites.import-form',
+                    'icon' => 'fas fa-fw fa-file-upload',
                 ],
             ],
         ],
         
-        ['header' => 'AKUN'],
+        
+        ['header' => 'PENGATURAN'],
         
         // Profile
         [
-            'text' => 'Profile',
+            'text' => 'Profil Saya',
             'route'  => 'profile.edit',
-            'icon' => 'fas fa-user',
+            'icon' => 'fas fa-fw fa-user-circle',
+            'icon_color' => 'gray',
         ],
         
         // Logout
         [
-            'text' => 'Logout',
+            'text' => 'Keluar',
             'route'  => 'logout.get',
-            'icon' => 'fas fa-sign-out-alt',
+            'icon' => 'fas fa-fw fa-sign-out-alt',
+            'icon_color' => 'red',
         ],
     ],
+
     /*
     |--------------------------------------------------------------------------
     | Menu Filters

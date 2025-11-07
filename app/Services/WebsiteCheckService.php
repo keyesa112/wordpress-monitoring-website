@@ -54,7 +54,6 @@ class WebsiteCheckService
             'status' => $statusCheck,
         ];
 
-        // Optional: tambahkan content scan jika service tersedia
         if ($contentScanner) {
             $result['content_scan'] = $contentScanner->scanContent($url);
         }

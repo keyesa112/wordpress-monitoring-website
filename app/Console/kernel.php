@@ -10,14 +10,14 @@ class Kernel extends ConsoleKernel
     protected function schedule(Schedule $schedule)
     {
         // Scan setiap jam
-        $schedule->command('websites:scan-all-scheduled')
-            ->hourly()
-            ->withoutOverlapping();
-        
-        // Atau scan setiap hari jam 2 pagi
         // $schedule->command('websites:scan-all-scheduled')
-        //     ->dailyAt('02:00')
+        //     ->hourly()
         //     ->withoutOverlapping();
+        
+        // Scan setiap hari jam 2 pagi
+        $schedule->command('websites:scan-all-scheduled')
+            ->dailyAt('02:00')
+            ->withoutOverlapping();
     }
 
     protected function commands()

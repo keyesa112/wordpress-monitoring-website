@@ -29,16 +29,20 @@ Route::get('/logout', function() {
 Route::middleware('auth')->group(function () {
     // Dashboard
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+
+    //import bulk url    
+    Route::get('websites/import', [WebsiteController::class, 'importForm'])->name('websites.import-form');
+    Route::post('websites/import-preview', [WebsiteController::class, 'importPreview'])->name('websites.import-preview');
+    Route::post('websites/import-store', [WebsiteController::class, 'importStore'])->name('websites.import-store');
+    Route::get('websites/template-download', [WebsiteController::class, 'downloadTemplate'])->name('websites.download-template');
     
     // Website CRUD
     Route::resource('websites', WebsiteController::class);
-    
+
     // Manual check website
     Route::post('/websites/{website}/check', [WebsiteController::class, 'check'])
         ->name('websites.check');
-    // Route::get('/websites/{website}/check', [WebsiteController::class, 'check'])
-    //     ->name('websites.check');
-    
+
     // File Monitoring Routes
     Route::post('websites/{website}/file-baseline', [WebsiteController::class, 'createFileBaseline'])
         ->name('websites.file-baseline');
@@ -53,7 +57,6 @@ Route::middleware('auth')->group(function () {
         session()->forget('scanning');
         return response()->json(['success' => true]);
     })->name('clear.scanning')->middleware('auth');
-
     
     // Profile
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
@@ -62,20 +65,20 @@ Route::middleware('auth')->group(function () {
 });
 
 // Test routes (untuk development - nanti bisa dihapus)
-Route::middleware('auth')->prefix('test')->group(function () {
-    // Scanner tests
-    Route::get('/ping', [TestController::class, 'testPing'])->name('test.ping');
-    Route::get('/posts', [TestController::class, 'testPosts'])->name('test.posts');
-    Route::get('/header-footer', [TestController::class, 'testHeaderFooter'])->name('test.header-footer');
-    Route::get('/meta', [TestController::class, 'testMeta'])->name('test.meta');
-    Route::get('/sitemap', [TestController::class, 'testSitemap'])->name('test.sitemap');
-    Route::get('/full-scan', [TestController::class, 'testFullScan'])->name('test.full-scan');
+// Route::middleware('auth')->prefix('test')->group(function () {
+//     // Scanner tests
+//     Route::get('/ping', [TestController::class, 'testPing'])->name('test.ping');
+//     Route::get('/posts', [TestController::class, 'testPosts'])->name('test.posts');
+//     Route::get('/header-footer', [TestController::class, 'testHeaderFooter'])->name('test.header-footer');
+//     Route::get('/meta', [TestController::class, 'testMeta'])->name('test.meta');
+//     Route::get('/sitemap', [TestController::class, 'testSitemap'])->name('test.sitemap');
+//     Route::get('/full-scan', [TestController::class, 'testFullScan'])->name('test.full-scan');
     
-    // Recommendation tests
-    Route::get('/recommendations', [TestController::class, 'testRecommendations'])
-        ->name('test.recommendations');
-    Route::get('/recommendations-dummy', [TestController::class, 'testRecommendationsDummy'])
-        ->name('test.recommendations-dummy');
-});
+//     // Recommendation tests
+//     Route::get('/recommendations', [TestController::class, 'testRecommendations'])
+//         ->name('test.recommendations');
+//     Route::get('/recommendations-dummy', [TestController::class, 'testRecommendationsDummy'])
+//         ->name('test.recommendations-dummy');
+// });
 
 require __DIR__.'/auth.php';

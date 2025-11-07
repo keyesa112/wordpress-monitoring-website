@@ -10,6 +10,7 @@ use App\Services\ContentScannerService;
 use App\Services\RecommendationService;
 use App\Services\FileMonitorService;
 use App\Jobs\ScanSingleWebsiteJob;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Http\Request;
 
 class WebsiteController extends Controller
@@ -39,6 +40,7 @@ class WebsiteController extends Controller
         $websites = Website::with('latestLog')
             ->orderBy('created_at', 'desc')
             ->get();
+    
         
         return view('websites.index', compact('websites'));
     }
@@ -662,4 +664,150 @@ class WebsiteController extends Controller
         return redirect()->back()
             ->with('success', 'Scan dimulai untuk ' . $websites->count() . ' website!');
     }
+
+    /**
+     * Show import form
+     */
+    public function importForm()
+    {
+        return view('websites.import');
+    }
+
+    /**
+     * Preview CSV data
+     */
+    public function importPreview(Request $request)
+    {
+        $request->validate([
+            'csv_file' => 'required|file|mimes:csv,txt|max:5120', // Max 5MB
+        ]);
+
+        try {
+            $file = $request->file('csv_file');
+            $handle = fopen($file->getPathname(), 'r');
+            
+            $data = [];
+            $errors = [];
+            $row = 0;
+            $existingUrls = Website::where('user_id', auth()->id())
+                ->pluck('url')
+                ->toArray();
+            
+            while (($csv = fgetcsv($handle)) !== false) {
+                $row++;
+                
+                // Skip header
+                if ($row === 1) continue;
+                
+                // Validasi format
+                if (empty($csv[0]) || empty($csv[1])) {
+                    $errors[] = "Row $row: URL dan Name tidak boleh kosong";
+                    continue;
+                }
+                
+                $name = trim($csv[0]);
+                $url = trim($csv[1]);
+                
+                // Validasi URL format
+                if (!filter_var($url, FILTER_VALIDATE_URL)) {
+                    $errors[] = "Row $row: '$url' bukan URL valid";
+                    continue;
+                }
+                
+                // Validasi duplikat di CSV
+                $urlExists = collect($data)
+                    ->where('url', $url)
+                    ->count() > 0;
+                
+                if ($urlExists) {
+                    $errors[] = "Row $row: '$url' sudah ada di CSV";
+                    continue;
+                }
+                
+                // Validasi duplikat di DB
+                if (in_array($url, $existingUrls)) {
+                    $errors[] = "Row $row: '$url' sudah ada di database";
+                    continue;
+                }
+                
+                $data[] = [
+                    'name' => $name,
+                    'url' => $url,
+                    'status' => 'pending',
+                    'row' => $row,
+                ];
+            }
+            
+            fclose($handle);
+            
+            return response()->json([
+                'success' => true,
+                'data' => $data,
+                'errors' => $errors,
+                'valid_count' => count($data),
+                'error_count' => count($errors),
+                'total_rows' => $row - 1, // exclude header
+            ]);
+            
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error parsing CSV: ' . $e->getMessage()
+            ], 400);
+        }
+    }
+
+    /**
+     * Store bulk websites
+     */
+    public function importStore(Request $request)
+    {
+        $data = $request->validate([
+            'websites' => 'required|array|min:1',
+            'websites.*.name' => 'required|string|max:255',
+            'websites.*.url' => 'required|url',
+        ]);
+
+        try {
+            $created = 0;
+            
+            foreach ($data['websites'] as $website) {
+                // Double check duplikat
+                $exists = Website::where('user_id', auth()->id())
+                    ->where('url', $website['url'])
+                    ->exists();
+                
+                if (!$exists) {
+                    Website::create([
+                        'user_id' => auth()->id(),
+                        'name' => $website['name'],
+                        'url' => $website['url'],
+                        'status' => 'pending',
+                        'is_active' => true,
+                    ]);
+                    $created++;
+                }
+            }
+
+            return redirect()->route('websites.index')
+                ->with('success', "Berhasil import $created website!");
+                
+        } catch (\Exception $e) {
+            return redirect()->back()
+                ->with('error', 'Error: ' . $e->getMessage());
+        }
+    }
+
+    public function downloadTemplate()
+    {
+        $csv = "Website Name,Website URL\n";
+        $csv .= "Example 1,https://example1.com\n";
+        $csv .= "Example 2,https://example2.com\n";
+        
+        return response($csv, 200, [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="websites_template.csv"',
+        ]);
+    }
+
 }

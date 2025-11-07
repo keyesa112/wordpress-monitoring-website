@@ -10,45 +10,45 @@ class DashboardController extends Controller
 {
     public function index()
     {
-        $userId = auth()->id();
+        $user = auth()->user();
         
-        $totalWebsites = Website::where('user_id', $userId)->count();
-        $onlineWebsites = Website::where('user_id', $userId)
-                                 ->where('status', 'online')
-                                 ->count();
-        $offlineWebsites = Website::where('user_id', $userId)
-                                  ->where('status', 'offline')
-                                  ->count();
-        $suspiciousWebsites = Website::where('user_id', $userId)
-                                     ->where('has_suspicious_content', true)
-                                     ->count();
+        // Get all logs untuk user ini
+        $logs = MonitoringLog::whereHas('website', function ($query) use ($user) {
+            $query->where('user_id', $user->id);
+        })->get();
         
-        $recentWebsites = Website::where('user_id', $userId)
-                                 ->with('latestLog')
-                                 ->orderBy('created_at', 'desc')
-                                 ->limit(10)
-                                 ->get();
-   
-        $suspiciousDetails = Website::where('user_id', $userId)
-                                    ->where('has_suspicious_content', true)
-                                    ->orderBy('suspicious_posts_count', 'desc')
-                                    ->limit(5)
-                                    ->get();
+        // Calculate statistics dari logs
+        $totalScans = $logs->count();
+        $onlineScans = $logs->where('status', 'online')->count();
+        $offlineScans = $logs->where('status', 'offline')->count();
+        $suspiciousScans = $logs->where('has_suspicious_content', true)->count();
         
-        $recentLogs = MonitoringLog::where('user_id', $userId)
-                                   ->with('website')
-                                   ->orderBy('created_at', 'desc')
-                                   ->limit(10)
-                                   ->get();
-
-        return view('dashboard', compact(
-            'totalWebsites',
-            'onlineWebsites',
-            'offlineWebsites',
-            'suspiciousWebsites',
-            'recentWebsites',
-            'suspiciousDetails',
-            'recentLogs'
-        ));
+        // Persentase
+        $onlinePercent = $totalScans > 0 ? round(($onlineScans / $totalScans) * 100, 1) : 0;
+        $offlinePercent = $totalScans > 0 ? round(($offlineScans / $totalScans) * 100, 1) : 0;
+        $suspiciousPercent = $totalScans > 0 ? round(($suspiciousScans / $totalScans) * 100, 1) : 0;
+        
+        // Average response time
+        $avgResponseTime = $logs->average('response_time') ?? 0;
+        
+        // Recent logs
+        $recentLogs = MonitoringLog::whereHas('website', function ($query) use ($user) {
+            $query->where('user_id', $user->id);
+        })->orderBy('created_at', 'desc')
+            ->limit(10)
+            ->get();
+        
+        // GANTI INI KE DASHBOARD YANG SUDAH ADA
+        return view('dashboard', [
+            'totalScans' => $totalScans,
+            'onlineScans' => $onlineScans,
+            'offlineScans' => $offlineScans,
+            'suspiciousScans' => $suspiciousScans,
+            'onlinePercent' => $onlinePercent,
+            'offlinePercent' => $offlinePercent,
+            'suspiciousPercent' => $suspiciousPercent,
+            'avgResponseTime' => round($avgResponseTime, 2),
+            'recentLogs' => $recentLogs,
+        ]);
     }
 }
