@@ -15,6 +15,20 @@
 @stop
 
 @section('content')
+
+    {{-- Warning Alert for REST API Requirement --}}
+    <div class="alert alert-warning d-flex align-items-center mb-4 shadow-sm" role="alert" style="border-left: 4px solid #f39c12;">
+        <div style="font-size: 2rem; margin-right: 1rem;">
+            <i class="fas fa-exclamation-triangle"></i>
+        </div>
+        <div>
+            <strong><i class="fas fa-info-circle"></i> Perhatian:</strong> 
+            Tool monitoring ini memerlukan <strong>WordPress REST API</strong> yang aktif. 
+            Jika situs Anda menonaktifkan REST API, fitur monitoring akan terbatas atau tidak berfungsi.
+            <a href="{{ route('guidelines.index') }}" class="alert-link">Baca panduan lengkap →</a>
+        </div>
+    </div>
+    
     {{-- Statistics from Logs --}}
     <div class="row">
         {{-- Total Scans --}}

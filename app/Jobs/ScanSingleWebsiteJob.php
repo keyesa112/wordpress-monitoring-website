@@ -42,25 +42,37 @@ class ScanSingleWebsiteJob implements ShouldQueue
             $scannerService = app(ContentScannerService::class);
             $recommendationService = app(RecommendationService::class);
 
-            // 1. Run checks
+            // 1. Run status check
             $statusResult = $checkService->checkStatus($website->url);
+
+            // 2. Run content scan
             $contentResult = $scannerService->scanContent($website->url);
 
-            // 2. Full scan result
-            $fullScanResult = [
-                'status' => $statusResult,
-                'posts' => $contentResult['posts'],
-                'pages' => $contentResult['pages'],
-                'header_footer' => $contentResult['header_footer'],
-                'meta' => $contentResult['meta'],
-                'sitemap' => $contentResult['sitemap'],
-                'has_suspicious_content' => $contentResult['has_suspicious_content'],
+            // 🔥 3. CHECK: Apakah REST API berhasil?
+            $postsError = $contentResult['posts']['error'] ?? null;
+            $pagesError = $contentResult['pages']['error'] ?? null;
+            $postsHasData = ($contentResult['posts']['total_posts'] ?? 0) > 0;
+            $pagesHasData = ($contentResult['pages']['total_pages'] ?? 0) > 0;
+
+            $restApiWorking = $postsHasData || $pagesHasData;
+
+            // 🔥 4. FALLBACK DETECTION (jika REST API gagal)
+            $wpDetection = [
+                'is_wordpress' => $restApiWorking,
+                'rest_api_available' => $restApiWorking,
+                'detection_method' => 'REST API',
+                'version' => 'Unknown',
+                'single_page_scan' => null,
             ];
 
-            // 3. Recommendations
-            $recommendations = $recommendationService->generateRecommendations($fullScanResult);
+            if (!$restApiWorking) {
+                // Jalankan fallback detection dengan single page scan
+                $wpDetection = $scannerService->detectWordPressFallback($website->url);
+                
+                Log::info("Fallback Detection [{$website->url}]: Method={$wpDetection['detection_method']}, WP={$wpDetection['is_wordpress']}");
+            }
 
-            // 4. Total suspicious
+            // 🔥 5. Hitung total suspicious (termasuk dari single page scan jika ada)
             $totalSuspicious = 
                 ($contentResult['posts']['suspicious_count'] ?? 0) +
                 ($contentResult['pages']['suspicious_count'] ?? 0) +
@@ -68,13 +80,49 @@ class ScanSingleWebsiteJob implements ShouldQueue
                 ($contentResult['meta']['keyword_count'] ?? 0) +
                 ($contentResult['sitemap']['keyword_count'] ?? 0);
 
-            // 5. Compressed result
+            // Tambahkan dari single page scan jika ada
+            if (isset($wpDetection['single_page_scan']) && $wpDetection['single_page_scan']) {
+                $totalSuspicious += ($wpDetection['single_page_scan']['keyword_count'] ?? 0);
+            }
+
+            // 6. Hitung has_suspicious_content (include single page scan)
+            $hasSuspiciousContent = $contentResult['has_suspicious_content'];
+            if (isset($wpDetection['single_page_scan']) && $wpDetection['single_page_scan']['has_suspicious']) {
+                $hasSuspiciousContent = true;
+            }
+
+            // 7. Full scan result (dengan info WordPress detection)
+            $fullScanResult = [
+                'status' => $statusResult,
+                'posts' => $contentResult['posts'],
+                'pages' => $contentResult['pages'],
+                'header_footer' => $contentResult['header_footer'],
+                'meta' => $contentResult['meta'],
+                'sitemap' => $contentResult['sitemap'],
+                'has_suspicious_content' => $hasSuspiciousContent,
+                'wordpress_detected' => $wpDetection['is_wordpress'],
+                'rest_api_available' => $wpDetection['rest_api_available'],
+                'detection_method' => $wpDetection['detection_method'],
+                'wordpress_version' => $wpDetection['version'] ?? 'Unknown',
+                'single_page_scan' => $wpDetection['single_page_scan'] ?? null,
+            ];
+
+            // 8. Recommendations (R11 & R12 akan trigger jika perlu)
+            $recommendations = $recommendationService->generateRecommendations($fullScanResult);
+
+            // 9. Compressed result
             $compressedResult = [
                 'status' => [
                     'status' => $statusResult['status'],
                     'http_code' => $statusResult['http_code'],
                     'response_time' => $statusResult['response_time'],
                     'error' => $statusResult['error'] ?? null,
+                ],
+                'wordpress_info' => [
+                    'is_wordpress' => $wpDetection['is_wordpress'],
+                    'detection_method' => $wpDetection['detection_method'],
+                    'version' => $wpDetection['version'] ?? 'Unknown',
+                    'rest_api_available' => $wpDetection['rest_api_available'],
                 ],
                 'content' => [
                     'url' => $contentResult['url'],
@@ -84,12 +132,14 @@ class ScanSingleWebsiteJob implements ShouldQueue
                         'total_posts' => $contentResult['posts']['total_posts'] ?? 0,
                         'suspicious_count' => $contentResult['posts']['suspicious_count'] ?? 0,
                         'suspicious_posts' => array_slice($contentResult['posts']['suspicious_posts'] ?? [], 0, 20),
+                        'error' => $postsError,
                     ],
                     'pages' => [
                         'has_suspicious' => $contentResult['pages']['has_suspicious'] ?? false,
                         'total_pages' => $contentResult['pages']['total_pages'] ?? 0,
                         'suspicious_count' => $contentResult['pages']['suspicious_count'] ?? 0,
                         'suspicious_pages' => array_slice($contentResult['pages']['suspicious_pages'] ?? [], 0, 20),
+                        'error' => $pagesError,
                     ],
                     'header_footer' => [
                         'has_suspicious' => $contentResult['header_footer']['has_suspicious'] ?? false,
@@ -106,24 +156,26 @@ class ScanSingleWebsiteJob implements ShouldQueue
                         'keyword_count' => $contentResult['sitemap']['keyword_count'] ?? 0,
                         'keywords' => $contentResult['sitemap']['keywords'] ?? [],
                     ],
-                    'has_suspicious_content' => $contentResult['has_suspicious_content'],
+                    'has_suspicious_content' => $hasSuspiciousContent,
                 ],
+                // 🔥 Single page scan (jika ada)
+                'single_page_scan' => $wpDetection['single_page_scan'] ?? null,
                 'recommendations' => $recommendations,
             ];
 
-            // 6. Update website
+            // 10. Update website
             DB::table('websites')->where('id', $website->id)->update([
                 'status' => $statusResult['status'],
                 'response_time' => $statusResult['response_time'],
                 'http_code' => $statusResult['http_code'],
-                'has_suspicious_content' => $contentResult['has_suspicious_content'],
+                'has_suspicious_content' => $hasSuspiciousContent,
                 'suspicious_posts_count' => $totalSuspicious,
                 'last_check_result' => json_encode($compressedResult),
                 'last_checked_at' => now(),
                 'updated_at' => now(),
             ]);
 
-            // 7. Log
+            // 11. Log
             MonitoringLog::create([
                 'website_id' => $website->id,
                 'user_id' => $this->userId,
@@ -131,7 +183,7 @@ class ScanSingleWebsiteJob implements ShouldQueue
                 'status' => $statusResult['status'],
                 'response_time' => $statusResult['response_time'],
                 'http_code' => $statusResult['http_code'],
-                'has_suspicious_content' => $contentResult['has_suspicious_content'],
+                'has_suspicious_content' => $hasSuspiciousContent,
                 'suspicious_posts_count' => $totalSuspicious,
                 'suspicious_posts' => json_encode(array_merge(
                     array_slice($contentResult['posts']['suspicious_posts'] ?? [], 0, 10),
@@ -141,7 +193,10 @@ class ScanSingleWebsiteJob implements ShouldQueue
                 'raw_result' => json_encode($compressedResult),
             ]);
 
-            Log::info("ScanSingleWebsiteJob SUCCESS: {$website->url}");
+            Log::info("ScanSingleWebsiteJob SUCCESS: {$website->url} | WP: " . 
+                ($wpDetection['is_wordpress'] ? 'Yes' : 'No') . 
+                " | Method: {$wpDetection['detection_method']}" .
+                " | Suspicious: {$totalSuspicious}");
 
         } catch (\Exception $e) {
             Log::error("ScanSingleWebsiteJob ERROR [{$website->url}]: " . $e->getMessage());

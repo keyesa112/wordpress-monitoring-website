@@ -14,9 +14,9 @@ class Kernel extends ConsoleKernel
         //     ->hourly()
         //     ->withoutOverlapping();
         
-        // Scan setiap hari jam 2 pagi
+        // Scan setiap hari jam 7 pagi
         $schedule->command('websites:scan-all-scheduled')
-            ->dailyAt('02:00')
+            ->dailyAt('07:00')
             ->withoutOverlapping();
     }
 

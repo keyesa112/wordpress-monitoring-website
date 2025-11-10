@@ -14,6 +14,23 @@
 @stop
 
 @section('content')
+
+ <div class="alert alert-info d-flex align-items-start mb-4 shadow-sm" role="alert" style="border-left: 4px solid #17a2b8;">
+        <div style="font-size: 2rem; margin-right: 1rem;">
+            <i class="fas fa-info-circle"></i>
+        </div>
+        <div>
+            <h6 class="alert-heading mb-2">
+                <i class="fas fa-exclamation-triangle"></i> <strong>Persyaratan Website</strong>
+            </h6>
+            <p class="mb-0">
+                Website yang ditambahkan harus menggunakan <strong>WordPress dengan REST API aktif</strong>. 
+                Pastikan endpoint <code>/wp-json/wp/v2/posts</code> dapat diakses untuk monitoring yang optimal. 
+                Jika REST API dinonaktifkan, fitur monitoring akan terbatas.
+            </p>
+        </div>
+    </div>
+
     <div class="row">
         {{-- Main Upload Form --}}
         <div class="col-lg-8">
@@ -347,6 +364,29 @@ Website C,https://websitec.com</code>
 
     .float-right {
         float: right;
+    }
+
+    .alert-info {
+        background-color: #e3f2fd;
+        border: 1px solid #90caf9;
+        color: #0d47a1;
+    }
+
+    .alert-info .alert-heading {
+        color: #01579b;
+        font-size: 1rem;
+    }
+
+    .alert-info strong {
+        color: #0277bd;
+    }
+
+    .alert-info code {
+        background-color: #bbdefb;
+        color: #01579b;
+        padding: 0.2rem 0.4rem;
+        border-radius: 0.25rem;
+        font-size: 0.85rem;
     }
 </style>
 @stop

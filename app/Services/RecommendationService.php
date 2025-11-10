@@ -66,11 +66,9 @@ class RecommendationService
             case 'has_suspicious_sitemap':
                 return $scanResults['sitemap']['has_suspicious'] ?? false;
 
-            // ✅ FIXED: Only trigger for truly offline sites (not slow ones)
             case 'website_offline':
                 return ($scanResults['status']['status'] ?? '') === 'offline';
 
-            // ✅ NEW: Separate triggers for slow websites
             case 'website_slow':
                 $status = $scanResults['status']['status'] ?? '';
                 $responseTime = $scanResults['status']['response_time'] ?? 0;
@@ -111,9 +109,14 @@ class RecommendationService
                 
                 return $infectedAreas >= ($recommendation['min_areas'] ?? 3);
 
-            // ✅ FIXED: More strict WP-JSON disabled detection
             case 'wp_json_disabled':
                 return $this->isWpJsonDisabled($scanResults);
+
+            // 🔥 NEW: Trigger R12 - Single Page Scan Only
+            case 'single_page_scan_only':
+                return isset($scanResults['single_page_scan']) && 
+                       $scanResults['single_page_scan'] !== null &&
+                       !($scanResults['rest_api_available'] ?? true);
 
             case 'suspicious_file_detected':
                 return isset($scanResults['file_changes']['suspicious_count']) &&
@@ -136,22 +139,18 @@ class RecommendationService
         }
     }
 
-    // ✅ NEW: Strict WP-JSON disabled check
     protected function isWpJsonDisabled($scanResults)
     {
         $postsError = $scanResults['posts']['error'] ?? '';
         $pagesError = $scanResults['pages']['error'] ?? '';
         
-        // ✅ Check if posts OR pages successfully got data
         $postsHasData = ($scanResults['posts']['total_posts'] ?? 0) > 0;
         $pagesHasData = ($scanResults['pages']['total_pages'] ?? 0) > 0;
         
-        // If either has data, WP-JSON is working
         if ($postsHasData || $pagesHasData) {
             return false;
         }
         
-        // Only trigger if BOTH have specific disabled errors
         $disabledPatterns = [
             'WP-JSON disabled',
             'REST API',
@@ -171,7 +170,6 @@ class RecommendationService
             }
         }
         
-        // Only trigger if BOTH are disabled
         return $postsDisabled && $pagesDisabled;
     }
 
@@ -184,7 +182,6 @@ class RecommendationService
             $description = str_replace('{count}', $count, $description);
         }
 
-        // ✅ NEW: Replace response_time placeholder
         if (strpos($description, '{response_time}') !== false) {
             $responseTime = number_format($scanResults['status']['response_time'] ?? 0, 0);
             $description = str_replace('{response_time}', $responseTime, $description);

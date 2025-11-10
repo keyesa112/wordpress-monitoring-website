@@ -37,9 +37,11 @@ class WebsiteController extends Controller
      */
     public function index()
     {
-        $websites = Website::with('latestLog')
-            ->orderBy('created_at', 'desc')
-            ->get();
+        
+        $websites = Website::where('user_id', auth()->id())
+        ->with('latestLog')
+        ->orderBy('created_at', 'desc')
+        ->get();
     
         
         return view('websites.index', compact('websites'));

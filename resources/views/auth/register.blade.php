@@ -17,14 +17,14 @@
         {{-- Name Field --}}
         <div class="form-group">
             <label for="name" class="text-muted">
-                <i class="fas fa-user"></i> Nama Lengkap
+                <i class="fas fa-user"></i> Nama Pengguna Anda
             </label>
             <input type="text" 
                    name="name" 
                    id="name"
                    class="form-control form-control-lg @error('name') is-invalid @enderror" 
                    value="{{ old('name') }}" 
-                   placeholder="Masukkan nama lengkap Anda" 
+                   placeholder="Masukkan nama pengguna" 
                    required 
                    autofocus>
             @error('name')

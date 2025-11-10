@@ -14,6 +14,23 @@
 @stop
 
 @section('content')
+
+ <div class="alert alert-info d-flex align-items-start mb-4 shadow-sm" role="alert" style="border-left: 4px solid #17a2b8;">
+        <div style="font-size: 2rem; margin-right: 1rem;">
+            <i class="fas fa-info-circle"></i>
+        </div>
+        <div>
+            <h6 class="alert-heading mb-2">
+                <i class="fas fa-exclamation-triangle"></i> <strong>Persyaratan Website</strong>
+            </h6>
+            <p class="mb-0">
+                Website yang ditambahkan harus menggunakan <strong>WordPress dengan REST API aktif</strong>. 
+                Pastikan endpoint <code>/wp-json/wp/v2/posts</code> dapat diakses untuk monitoring yang optimal. 
+                Jika REST API dinonaktifkan, fitur monitoring akan terbatas.
+            </p>
+        </div>
+    </div>
+    
     <div class="row">
         <div class="col-lg-8">
             <div class="card shadow-sm">

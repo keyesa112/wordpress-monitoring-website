@@ -14,7 +14,7 @@ return [
     |
     */
 
-    'title' => 'Fruity Logic Website Monitor',
+    'title' => 'Website Monitor',
     'title_prefix' => '',
     'title_postfix' => '| Admin Panel',
 
@@ -336,6 +336,15 @@ return [
         ],
         
         
+        ['header' => 'BANTUAN & PANDUAN'],
+    
+        [
+            'text' => 'Panduan Monitoring',
+            'route'  => 'guidelines.index',
+            'icon' => 'fas fa-fw fa-book-open',
+            'icon_color' => 'info',
+        ],
+
         ['header' => 'PENGATURAN'],
         
         // Profile

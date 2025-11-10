@@ -50,10 +50,14 @@ class ContentScannerService
             'connect_timeout' => 10,
             'verify' => false,
             'headers' => [
-                'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language' => 'id-ID,id;q=0.9',
-                'Accept-Encoding' => 'gzip, deflate',
+                // 🔥 Gunakan real browser UA
+                'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language' => 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
+                'Accept-Encoding' => 'gzip, deflate, br',
+                'Connection' => 'keep-alive',
+                'Upgrade-Insecure-Requests' => '1',
+                'Cache-Control' => 'max-age=0',
             ],
             'allow_redirects' => true,
             'http_errors' => false,
@@ -287,6 +291,65 @@ class ContentScannerService
         ];
     }
 
+    // public function scanHeaderFooter($url)
+    // {
+    //     try {
+    //         $response = $this->client->get($url);
+    //         $statusCode = $response->getStatusCode();
+    //         $html = $response->getBody()->getContents();
+
+    //         if ($this->isBlockedByWAF($html, $statusCode)) {
+    //             return ['has_suspicious' => false, 'keywords' => [], 'keyword_count' => 0, 'error' => "WAF blocked (HTTP {$statusCode})"];
+    //         }
+
+    //         if ($statusCode !== 200) {
+    //             return ['has_suspicious' => false, 'keywords' => [], 'keyword_count' => 0, 'error' => "HTTP {$statusCode}"];
+    //         }
+
+    //         $foundKeywords = $this->detectKeywords(strtolower($html));
+
+    //         return [
+    //             'has_suspicious' => $foundKeywords['is_suspicious'],
+    //             'keywords' => $foundKeywords['keywords'],
+    //             'keyword_count' => count($foundKeywords['keywords']),
+    //             'error' => null,
+    //         ];
+    //     } catch (\Exception $e) {
+    //         return ['has_suspicious' => false, 'keywords' => [], 'keyword_count' => 0, 'error' => $e->getMessage()];
+    //     }
+    // }
+
+    // public function scanMeta($url)
+    // {
+    //     try {
+    //         $response = $this->client->get($url);
+    //         $statusCode = $response->getStatusCode();
+    //         $html = $response->getBody()->getContents();
+
+    //         if ($this->isBlockedByWAF($html, $statusCode) || $statusCode !== 200) {
+    //             return ['has_suspicious' => false, 'keywords' => [], 'keyword_count' => 0, 'meta_title' => '', 'meta_description' => '', 'error' => "HTTP {$statusCode}"];
+    //         }
+            
+    //         preg_match('/<title>(.*?)<\/title>/i', $html, $title);
+    //         preg_match('/<meta\s+name=["\']description["\']\s+content=["\'](.*?)["\']/i', $html, $description);
+    //         preg_match('/<meta\s+name=["\']keywords["\']\s+content=["\'](.*?)["\']/i', $html, $keywords);
+
+    //         $metaText = strtolower(($title[1] ?? '') . ' ' . ($description[1] ?? '') . ' ' . ($keywords[1] ?? ''));
+    //         $foundKeywords = $this->detectKeywords($metaText);
+
+    //         return [
+    //             'has_suspicious' => $foundKeywords['is_suspicious'],
+    //             'keywords' => $foundKeywords['keywords'],
+    //             'keyword_count' => count($foundKeywords['keywords']),
+    //             'meta_title' => $title[1] ?? '',
+    //             'meta_description' => $description[1] ?? '',
+    //             'error' => null,
+    //         ];
+    //     } catch (\Exception $e) {
+    //         return ['has_suspicious' => false, 'keywords' => [], 'keyword_count' => 0, 'meta_title' => '', 'meta_description' => '', 'error' => $e->getMessage()];
+    //     }
+    // }
+
     public function scanHeaderFooter($url)
     {
         try {
@@ -294,12 +357,12 @@ class ContentScannerService
             $statusCode = $response->getStatusCode();
             $html = $response->getBody()->getContents();
 
-            if ($this->isBlockedByWAF($html, $statusCode)) {
-                return ['has_suspicious' => false, 'keywords' => [], 'keyword_count' => 0, 'error' => "WAF blocked (HTTP {$statusCode})"];
-            }
-
             if ($statusCode !== 200) {
                 return ['has_suspicious' => false, 'keywords' => [], 'keyword_count' => 0, 'error' => "HTTP {$statusCode}"];
+            }
+
+            if (empty($html) || strlen($html) < 100) {
+                return ['has_suspicious' => false, 'keywords' => [], 'keyword_count' => 0, 'error' => "Empty or invalid HTML"];
             }
 
             $foundKeywords = $this->detectKeywords(strtolower($html));
@@ -322,8 +385,12 @@ class ContentScannerService
             $statusCode = $response->getStatusCode();
             $html = $response->getBody()->getContents();
 
-            if ($this->isBlockedByWAF($html, $statusCode) || $statusCode !== 200) {
+            if ($statusCode !== 200) {
                 return ['has_suspicious' => false, 'keywords' => [], 'keyword_count' => 0, 'meta_title' => '', 'meta_description' => '', 'error' => "HTTP {$statusCode}"];
+            }
+
+            if (empty($html) || strlen($html) < 100) {
+                return ['has_suspicious' => false, 'keywords' => [], 'keyword_count' => 0, 'meta_title' => '', 'meta_description' => '', 'error' => "Empty HTML"];
             }
             
             preg_match('/<title>(.*?)<\/title>/i', $html, $title);
@@ -415,6 +482,160 @@ class ContentScannerService
         return [
             'is_suspicious' => $isSuspicious,
             'keywords' => array_unique(array_merge($foundSpecific, $foundSingle)),
+        ];
+    }
+
+    /**
+     * Fallback Detection + Single Page Content Scan
+     */
+    public function detectWordPressFallback($url)
+    {
+        try {
+            $response = $this->client->get($url);
+            
+            if ($response->getStatusCode() !== 200) {
+                return [
+                    'is_wordpress' => false,
+                    'method' => 'Failed',
+                    'version' => null,
+                    'single_page_scan' => null,
+                ];
+            }
+
+            $html = $response->getBody()->getContents();
+            $htmlLower = strtolower($html);
+
+            // 🔥 SCAN HOMEPAGE CONTENT (Single Page)
+            $singlePageScan = $this->scanSinglePageContent($html);
+
+            // Method 1: Meta Generator Tag
+            if (preg_match('/<meta\s+name=["\']generator["\']\s+content=["\']WordPress\s+([0-9.]+)["\']/', $html, $matches)) {
+                return [
+                    'is_wordpress' => true,
+                    'method' => 'Meta Generator',
+                    'version' => $matches[1],
+                    'can_scan_content' => false,
+                    'single_page_scan' => $singlePageScan, // 🔥 Include scan result
+                ];
+            }
+
+            // Method 2: HTML Keywords
+            $wpKeywords = ['wp-content', 'wp-includes', 'wp-json', '/wp-content/themes/', '/wp-content/plugins/'];
+            $foundCount = 0;
+            foreach ($wpKeywords as $keyword) {
+                if (strpos($htmlLower, $keyword) !== false) {
+                    $foundCount++;
+                }
+            }
+
+            if ($foundCount >= 2) {
+                return [
+                    'is_wordpress' => true,
+                    'method' => 'HTML Keywords',
+                    'version' => 'Unknown',
+                    'can_scan_content' => false,
+                    'single_page_scan' => $singlePageScan,
+                ];
+            }
+
+            // Method 3: Check WP Endpoints
+            try {
+                $loginCheck = $this->client->get(rtrim($url, '/') . '/wp-login.php');
+                if (in_array($loginCheck->getStatusCode(), [200, 302])) {
+                    return [
+                        'is_wordpress' => true,
+                        'method' => 'WP Endpoints',
+                        'version' => 'Unknown',
+                        'can_scan_content' => false,
+                        'single_page_scan' => $singlePageScan,
+                    ];
+                }
+            } catch (\Exception $e) {
+                // Silent fail
+            }
+
+            // Not WordPress
+            return [
+                'is_wordpress' => false,
+                'method' => 'Not Detected',
+                'version' => null,
+                'single_page_scan' => $singlePageScan, // Tetap scan walau bukan WP
+            ];
+
+        } catch (\Exception $e) {
+            return [
+                'is_wordpress' => false,
+                'method' => 'Error',
+                'version' => null,
+                'error' => $e->getMessage(),
+                'single_page_scan' => null,
+            ];
+        }
+    }
+
+    /**
+     * Scan Single Page Content (Homepage Only)
+     */
+    protected function scanSinglePageContent($html)
+    {
+        $htmlLower = strtolower($html);
+        
+        // 1. Scan HTML raw
+        $foundKeywords = $this->detectKeywords($htmlLower);
+        
+        // 2. Extract title & meta
+        preg_match('/<title>(.*?)<\/title>/i', $html, $title);
+        preg_match('/<meta\s+name=["\']description["\']\s+content=["\'](.*?)["\']/i', $html, $description);
+        
+        // 3. Detect hidden links
+        $hiddenLinks = [];
+        if (preg_match_all('/<a\s+[^>]*href=["\']([^"\']+)["\'][^>]*>/i', $html, $links)) {
+            foreach ($links[1] as $link) {
+                if ($this->detectKeywords(strtolower($link))['is_suspicious']) {
+                    $hiddenLinks[] = $link;
+                    if (count($hiddenLinks) >= 10) break;
+                }
+            }
+        }
+        
+        // 4. Strip HTML tags & scan plain text
+        $plainText = strip_tags($html);
+        $plainTextLower = strtolower($plainText);
+        $plainTextKeywords = $this->detectKeywords($plainTextLower);
+
+        \Log::info("Plain Text Keywords: " . json_encode($plainTextKeywords));
+        
+        // 🔥 5. NEW: Scan HTML attributes (data-*, title, alt, aria-label)
+        $attributeText = '';
+        if (preg_match_all('/(?:data-[a-z-]+|title|alt|aria-label)=["\']([^"\']+)["\']/i', $html, $attrs)) {
+            $attributeText = implode(' ', $attrs[1]);
+        }
+        $attributeKeywords = $this->detectKeywords(strtolower($attributeText));
+        
+        // 6. Merge results
+        $allKeywords = array_unique(array_merge(
+            $foundKeywords['keywords'],
+            $plainTextKeywords['keywords'],
+            $attributeKeywords['keywords'] // 🔥 Include attribute keywords
+        ));
+        
+        $isSuspicious = 
+            $foundKeywords['is_suspicious'] || 
+            $plainTextKeywords['is_suspicious'] ||
+            $attributeKeywords['is_suspicious'] || // 🔥 Check attributes
+            !empty($hiddenLinks);
+        
+        return [
+            'has_suspicious' => $isSuspicious,
+            'keywords' => $allKeywords,
+            'keyword_count' => count($allKeywords),
+            'hidden_links' => $hiddenLinks,
+            'hidden_links_count' => count($hiddenLinks),
+            'title' => $title[1] ?? '',
+            'description' => $description[1] ?? '',
+            'scan_type' => 'single_page_homepage',
+            'plain_text_checked' => true,
+            'attributes_checked' => true, // 🔥 NEW flag
         ];
     }
 }
