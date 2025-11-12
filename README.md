@@ -11,7 +11,7 @@
 
 Web Monitor adalah platform monitoring keamanan WordPress yang memantau status situs, menganalisis potensi penyusupan pada konten judi online (posts, pages, meta tags, sitemap), dan memberikan rekomendasi otomatis untuk tindakan perbaikan.
 
-[🌐 Live Demo](https://your-demo-url.com) | [📖 Documentation](#dokumentasi) | [🐛 Report Bug](https://github.com/username/repo/issues) | [✨ Request Feature](https://github.com/username/repo/issues)
+[🌐 Live Demo]([https://your-demo-url.com](https://webmonitor.my.id/))
 
 ---
 
