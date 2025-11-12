@@ -4,6 +4,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\WebsiteController;
 use App\Http\Controllers\TestController;
+use App\Http\Controllers\LandingController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth;
 
@@ -13,7 +14,11 @@ use Illuminate\Support\Facades\Auth;
 |--------------------------------------------------------------------------
 */
 
-Route::get('/', function () {
+// Landing page (public)
+Route::get('/', [LandingController::class, 'index'])->name('landing');
+Route::post('/guest-scan', [LandingController::class, 'guestScan'])->name('guest.scan');
+
+Route::get('/home', function () {
     return redirect()->route('dashboard');
 });
 

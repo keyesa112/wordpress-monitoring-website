@@ -68,7 +68,6 @@ class ContentScannerService
     {
         set_time_limit(300);
         
-        // ✅ OPTIMIZATION 3: Parallel scanning with promises
         $results = [
             'url' => $url,
             'scanned_at' => now()->toDateTimeString(),

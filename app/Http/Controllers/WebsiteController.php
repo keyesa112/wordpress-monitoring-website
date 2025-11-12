@@ -37,13 +37,11 @@ class WebsiteController extends Controller
      */
     public function index()
     {
-        
         $websites = Website::where('user_id', auth()->id())
         ->with('latestLog')
         ->orderBy('created_at', 'desc')
         ->get();
     
-        
         return view('websites.index', compact('websites'));
     }
 
@@ -62,9 +60,16 @@ class WebsiteController extends Controller
     {
         $request->validate([
             'name' => 'required|string|max:255',
-            'url' => 'required|url|unique:websites,url',
+            'url' => [
+                'required',
+                'url',
+                \Illuminate\Validation\Rule::unique('websites')
+                    ->where('user_id', auth()->id()),
+            ],
             'server_path' => 'nullable|string|max:500',
             'notes' => 'nullable|string',
+        ], [
+            'url.unique' => 'URL ini sudah ada di daftar website Anda. Silakan gunakan URL yang berbeda.',
         ]);
 
         $website = Website::create([
@@ -86,15 +91,9 @@ class WebsiteController extends Controller
 
     /**
      * Display the specified website
-     * ✅ SECURITY CHECK
      */
     public function show(Website $website)
     {
-        // ✅ Verify ownership
-        if ($website->user_id !== auth()->id()) {
-            abort(403, 'Unauthorized');
-        }
-
         $website->load(['monitoringLogs' => function($query) {
             $query->orderBy('created_at', 'desc')->limit(20);
         }]);
@@ -110,38 +109,38 @@ class WebsiteController extends Controller
 
     /**
      * Show the form for editing the specified website
-     * ✅ SECURITY CHECK
      */
     public function edit(Website $website)
     {
-        // ✅ Verify ownership
-        if ($website->user_id !== auth()->id()) {
-            abort(403, 'Unauthorized');
-        }
-
         return view('websites.edit', compact('website'));
     }
 
     /**
      * Update the specified website
-     * ✅ SECURITY CHECK
      */
     public function update(Request $request, Website $website)
     {
-        // ✅ Verify ownership
-        if ($website->user_id !== auth()->id()) {
-            abort(403, 'Unauthorized');
-        }
-
         $request->validate([
             'name' => 'required|string|max:255',
-            'url' => 'required|url|unique:websites,url,' . $website->id,
+            'url' => [
+                'required',
+                'url',
+                \Illuminate\Validation\Rule::unique('websites')
+                    ->where('user_id', auth()->id())
+                    ->ignore($website->id),
+            ],
             'server_path' => 'nullable|string|max:500',
             'notes' => 'nullable|string',
-            'is_active' => 'boolean',
+        ], [
+            'url.unique' => 'URL ini sudah ada di daftar website Anda.',
         ]);
 
-        $website->update($request->only(['name', 'url', 'server_path', 'notes', 'is_active']));
+        $website->update([
+            'name' => $request->name,
+            'url' => $request->url,
+            'server_path' => $request->server_path,
+            'notes' => $request->notes,
+        ]);
 
         return redirect()->route('websites.index')
             ->with('success', 'Website berhasil diupdate!');
@@ -149,15 +148,9 @@ class WebsiteController extends Controller
 
     /**
      * Remove the specified website
-     * ✅ SECURITY CHECK
      */
     public function destroy(Website $website)
     {
-        // ✅ Verify ownership
-        if ($website->user_id !== auth()->id()) {
-            abort(403, 'Unauthorized');
-        }
-
         $website->delete();
 
         return redirect()->route('websites.index')
@@ -166,15 +159,9 @@ class WebsiteController extends Controller
 
     /**
      * Manual check website (full check)
-     * ✅ SECURITY CHECK
      */
     public function check(Website $website)
     {
-        // ✅ Verify ownership
-        if ($website->user_id !== auth()->id()) {
-            abort(403, 'Unauthorized');
-        }
-
         set_time_limit(300);
         
         $this->performFullCheck($website);
@@ -188,11 +175,6 @@ class WebsiteController extends Controller
      */
     public function checkStatus(Website $website)
     {
-        // ✅ Verify ownership
-        if ($website->user_id !== auth()->id()) {
-            abort(403, 'Unauthorized');
-        }
-
         $this->performStatusCheck($website);
 
         return redirect()->back()
@@ -204,11 +186,6 @@ class WebsiteController extends Controller
      */
     public function scanContent(Website $website)
     {
-        // ✅ Verify ownership
-        if ($website->user_id !== auth()->id()) {
-            abort(403, 'Unauthorized');
-        }
-
         set_time_limit(300);
         
         $this->performContentScan($website);
@@ -219,15 +196,9 @@ class WebsiteController extends Controller
 
     /**
      * Create baseline for file monitoring
-     * ✅ SECURITY CHECK
      */
     public function createFileBaseline(Website $website)
     {
-        // ✅ Verify ownership
-        if ($website->user_id !== auth()->id()) {
-            abort(403, 'Unauthorized');
-        }
-
         if (empty($website->server_path)) {
             return redirect()->back()->with('error', 'Server path belum dikonfigurasi untuk website ini.');
         }
@@ -248,15 +219,9 @@ class WebsiteController extends Controller
 
     /**
      * Scan files and compare with baseline
-     * ✅ SECURITY CHECK
      */
     public function scanFiles(Website $website)
     {
-        // ✅ Verify ownership
-        if ($website->user_id !== auth()->id()) {
-            abort(403, 'Unauthorized');
-        }
-
         if (empty($website->server_path)) {
             return redirect()->back()->with('error', 'Server path belum dikonfigurasi untuk website ini.');
         }
@@ -283,15 +248,9 @@ class WebsiteController extends Controller
 
     /**
      * Show file changes
-     * ✅ SECURITY CHECK
      */
     public function fileChanges(Website $website)
     {
-        // ✅ Verify ownership
-        if ($website->user_id !== auth()->id()) {
-            abort(403, 'Unauthorized');
-        }
-
         $changes = FileChange::where('website_id', $website->id)
             ->orderBy('created_at', 'desc')
             ->paginate(50);
@@ -522,135 +481,6 @@ class WebsiteController extends Controller
         ]);
     }
 
-    // public function scanAll()
-    // {
-    //     set_time_limit(300); // Set timeout
-        
-    //     $websites = Website::where('user_id', auth()->id())->get();
-        
-    //     foreach ($websites as $website) {
-    //         try {
-    //             $website->update(['status' => 'checking']);
-                
-    //             // === SAMA PERSIS SEPERTI performFullCheck ===
-                
-    //             // 1. Run checks
-    //             $statusResult = $this->checkService->checkStatus($website->url);
-    //             $contentResult = $this->scannerService->scanContent($website->url);
-                
-    //             // 2. Build full scan result
-    //             $fullScanResult = [
-    //                 'status' => $statusResult,
-    //                 'posts' => $contentResult['posts'],
-    //                 'pages' => $contentResult['pages'],
-    //                 'header_footer' => $contentResult['header_footer'],
-    //                 'meta' => $contentResult['meta'],
-    //                 'sitemap' => $contentResult['sitemap'],
-    //                 'has_suspicious_content' => $contentResult['has_suspicious_content'],
-    //             ];
-                
-    //             // 3. Generate recommendations
-    //             $recommendations = $this->recommendationService->generateRecommendations($fullScanResult);
-                
-    //             // 4. Calculate SEMUA suspicious (tidak hanya posts + pages!)
-    //             $totalSuspicious = 
-    //                 ($contentResult['posts']['suspicious_count'] ?? 0) +
-    //                 ($contentResult['pages']['suspicious_count'] ?? 0) +
-    //                 ($contentResult['header_footer']['keyword_count'] ?? 0) +
-    //                 ($contentResult['meta']['keyword_count'] ?? 0) +
-    //                 ($contentResult['sitemap']['keyword_count'] ?? 0);
-                
-    //             // 5. Build compressed result LENGKAP
-    //             $compressedResult = [
-    //                 'status' => [
-    //                     'status' => $statusResult['status'],
-    //                     'http_code' => $statusResult['http_code'],
-    //                     'response_time' => $statusResult['response_time'],
-    //                     'error' => $statusResult['error'] ?? null,
-    //                 ],
-    //                 'content' => [
-    //                     'url' => $contentResult['url'],
-    //                     'scanned_at' => $contentResult['scanned_at'],
-    //                     'posts' => [
-    //                         'has_suspicious' => $contentResult['posts']['has_suspicious'] ?? false,
-    //                         'total_posts' => $contentResult['posts']['total_posts'] ?? 0,
-    //                         'suspicious_count' => $contentResult['posts']['suspicious_count'] ?? 0,
-    //                         'suspicious_posts' => array_slice($contentResult['posts']['suspicious_posts'] ?? [], 0, 20),
-    //                         'injected_html' => $contentResult['posts']['injected_html'] ?? null,
-    //                         'error' => $contentResult['posts']['error'] ?? null,
-    //                     ],
-    //                     'pages' => [
-    //                         'has_suspicious' => $contentResult['pages']['has_suspicious'] ?? false,
-    //                         'total_pages' => $contentResult['pages']['total_pages'] ?? 0,
-    //                         'suspicious_count' => $contentResult['pages']['suspicious_count'] ?? 0,
-    //                         'suspicious_pages' => array_slice($contentResult['pages']['suspicious_pages'] ?? [], 0, 20),
-    //                         'injected_html' => $contentResult['pages']['injected_html'] ?? null,
-    //                         'error' => $contentResult['pages']['error'] ?? null,
-    //                     ],
-    //                     'header_footer' => [
-    //                         'has_suspicious' => $contentResult['header_footer']['has_suspicious'] ?? false,
-    //                         'keyword_count' => $contentResult['header_footer']['keyword_count'] ?? 0,
-    //                         'keywords' => $contentResult['header_footer']['keywords'] ?? [],
-    //                         'error' => $contentResult['header_footer']['error'] ?? null,
-    //                     ],
-    //                     'meta' => [
-    //                         'has_suspicious' => $contentResult['meta']['has_suspicious'] ?? false,
-    //                         'keyword_count' => $contentResult['meta']['keyword_count'] ?? 0,
-    //                         'keywords' => $contentResult['meta']['keywords'] ?? [],
-    //                         'meta_title' => $contentResult['meta']['meta_title'] ?? '',
-    //                         'meta_description' => $contentResult['meta']['meta_description'] ?? '',
-    //                         'error' => $contentResult['meta']['error'] ?? null,
-    //                     ],
-    //                     'sitemap' => [
-    //                         'has_suspicious' => $contentResult['sitemap']['has_suspicious'] ?? false,
-    //                         'keyword_count' => $contentResult['sitemap']['keyword_count'] ?? 0,
-    //                         'keywords' => $contentResult['sitemap']['keywords'] ?? [],
-    //                         'suspicious_urls' => array_slice($contentResult['sitemap']['suspicious_urls'] ?? [], 0, 10),
-    //                         'error' => $contentResult['sitemap']['error'] ?? null,
-    //                     ],
-    //                     'has_suspicious_content' => $contentResult['has_suspicious_content'],
-    //                 ],
-    //                 'recommendations' => $recommendations,
-    //             ];
-                
-    //             // 6. Update website
-    //             $website->update([
-    //                 'status' => $statusResult['status'],
-    //                 'response_time' => $statusResult['response_time'],
-    //                 'http_code' => $statusResult['http_code'],
-    //                 'has_suspicious_content' => $contentResult['has_suspicious_content'],
-    //                 'suspicious_posts_count' => $totalSuspicious,
-    //                 'last_check_result' => json_encode($compressedResult),
-    //                 'last_checked_at' => now(),
-    //             ]);
-                
-    //             // 7. Log to monitoring
-    //             MonitoringLog::create([
-    //                 'website_id' => $website->id,
-    //                 'user_id' => auth()->id(),
-    //                 'check_type' => 'full',
-    //                 'status' => $statusResult['status'],
-    //                 'response_time' => $statusResult['response_time'],
-    //                 'http_code' => $statusResult['http_code'],
-    //                 'has_suspicious_content' => $contentResult['has_suspicious_content'],
-    //                 'suspicious_posts_count' => $totalSuspicious,
-    //                 'suspicious_posts' => array_merge(
-    //                     array_slice($contentResult['posts']['suspicious_posts'] ?? [], 0, 10),
-    //                     array_slice($contentResult['pages']['suspicious_pages'] ?? [], 0, 10)
-    //                 ),
-    //                 'error_message' => $statusResult['error'] ?? $contentResult['posts']['error'] ?? null,
-    //                 'raw_result' => $compressedResult,
-    //             ]);
-                
-    //         } catch (\Exception $e) {
-    //             \Log::error('Scan error for ' . $website->url . ': ' . $e->getMessage());
-    //             $website->update(['status' => 'error']);
-    //         }
-    //     }
-        
-    //     return redirect()->back()->with('success', 'Scan semua website selesai!');
-    // }
-
     public function scanAll()
     {
         $websites = Website::where('user_id', auth()->id())->get();
@@ -681,7 +511,7 @@ class WebsiteController extends Controller
     public function importPreview(Request $request)
     {
         $request->validate([
-            'csv_file' => 'required|file|mimes:csv,txt|max:5120', // Max 5MB
+            'csv_file' => 'required|file|mimes:csv,txt|max:5120',
         ]);
 
         try {
@@ -698,10 +528,8 @@ class WebsiteController extends Controller
             while (($csv = fgetcsv($handle)) !== false) {
                 $row++;
                 
-                // Skip header
                 if ($row === 1) continue;
                 
-                // Validasi format
                 if (empty($csv[0]) || empty($csv[1])) {
                     $errors[] = "Row $row: URL dan Name tidak boleh kosong";
                     continue;
@@ -710,13 +538,11 @@ class WebsiteController extends Controller
                 $name = trim($csv[0]);
                 $url = trim($csv[1]);
                 
-                // Validasi URL format
                 if (!filter_var($url, FILTER_VALIDATE_URL)) {
                     $errors[] = "Row $row: '$url' bukan URL valid";
                     continue;
                 }
                 
-                // Validasi duplikat di CSV
                 $urlExists = collect($data)
                     ->where('url', $url)
                     ->count() > 0;
@@ -726,7 +552,6 @@ class WebsiteController extends Controller
                     continue;
                 }
                 
-                // Validasi duplikat di DB
                 if (in_array($url, $existingUrls)) {
                     $errors[] = "Row $row: '$url' sudah ada di database";
                     continue;
@@ -748,7 +573,7 @@ class WebsiteController extends Controller
                 'errors' => $errors,
                 'valid_count' => count($data),
                 'error_count' => count($errors),
-                'total_rows' => $row - 1, // exclude header
+                'total_rows' => $row - 1,
             ]);
             
         } catch (\Exception $e) {
@@ -772,31 +597,43 @@ class WebsiteController extends Controller
 
         try {
             $created = 0;
+            $skipped = 0;
             
             foreach ($data['websites'] as $website) {
-                // Double check duplikat
                 $exists = Website::where('user_id', auth()->id())
                     ->where('url', $website['url'])
                     ->exists();
                 
                 if (!$exists) {
-                    Website::create([
+                    $newWebsite = Website::create([
                         'user_id' => auth()->id(),
                         'name' => $website['name'],
                         'url' => $website['url'],
-                        'status' => 'pending',
+                        'status' => 'checking',
                         'is_active' => true,
                     ]);
+                    
+                    \App\Jobs\ScanSingleWebsiteJob::dispatch($newWebsite->id, auth()->id());
+                    
                     $created++;
+                } else {
+                    $skipped++;
                 }
             }
 
+            $message = "Berhasil import $created website!";
+            if ($skipped > 0) {
+                $message .= " ($skipped website dilewati karena duplikat)";
+            }
+
             return redirect()->route('websites.index')
-                ->with('success', "Berhasil import $created website!");
+                ->with('success', $message);
                 
         } catch (\Exception $e) {
+            \Log::error("Import error: " . $e->getMessage());
+            
             return redirect()->back()
-                ->with('error', 'Error: ' . $e->getMessage());
+                ->with('error', 'Terjadi kesalahan saat import. Silakan coba lagi.');
         }
     }
 
@@ -811,5 +648,4 @@ class WebsiteController extends Controller
             'Content-Disposition' => 'attachment; filename="websites_template.csv"',
         ]);
     }
-
 }
