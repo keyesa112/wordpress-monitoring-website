@@ -35,7 +35,6 @@ Web Monitor adalah platform monitoring keamanan WordPress yang memantau status s
 - ✅ **Cron Job Scheduling** - Auto-scan berkala
 - ✅ **Queue System** - Background scanning dengan Laravel Queue
 - ✅ **Bulk Import (CSV)** - Import multiple URLs sekaligus
-- ✅ **Email Notifications** - Alert jika terdeteksi ancaman
 
 ### 🎯 **Smart Recommendations**
 - ✅ **AI-Powered Suggestions** - Rekomendasi berdasarkan severity level
